@@ -35,10 +35,16 @@ def make_device(hass=None):
 class FakeHass:
     def __init__(self):
         self.created_tasks = []
+        self.background_tasks = []
 
     def async_create_task(self, coro):
         task = asyncio.create_task(coro)
         self.created_tasks.append(task)
+        return task
+
+    def async_create_background_task(self, coro, _name):
+        task = asyncio.create_task(coro)
+        self.background_tasks.append(task)
         return task
 
 
@@ -351,7 +357,8 @@ async def test_tracker_deduplicates_and_cancels_update():
 
     assert first_task is second_task
     assert fake_device.calls == 1
-    assert len(hass.created_tasks) == 1
+    assert hass.created_tasks == []
+    assert len(hass.background_tasks) == 1
 
     await tracker.async_will_remove_from_hass()
 
@@ -385,7 +392,8 @@ async def test_statistics_task_deduplicates_and_cancels():
 
     assert first_task is second_task
     assert calls == 1
-    assert len(hass.created_tasks) == 1
+    assert hass.created_tasks == []
+    assert len(hass.background_tasks) == 1
 
     await device.cancel_statistics_update()
 

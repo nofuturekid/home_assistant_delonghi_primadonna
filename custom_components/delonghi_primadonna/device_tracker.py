@@ -62,8 +62,9 @@ class DelongiPrimadonnaDeviceTracker(DelonghiDeviceEntity, ScannerEntity):
         """Update the device status."""
         task = self._device_name_task
         if task is None or task.done():
-            self._device_name_task = self.hass.async_create_task(
-                self.device.get_device_name()
+            self._device_name_task = self.hass.async_create_background_task(
+                self.device.get_device_name(),
+                "delonghi device tracker update",
             )
 
     async def async_will_remove_from_hass(self) -> None:

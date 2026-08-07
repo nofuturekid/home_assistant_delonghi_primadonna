@@ -378,8 +378,9 @@ class DelongiPrimadonna:
         if time.monotonic() - self._last_stats_request < 60:
             return
 
-        self._statistics_task = self._hass.async_create_task(
-            self._run_statistics_update()
+        self._statistics_task = self._hass.async_create_background_task(
+            self._run_statistics_update(),
+            "delonghi statistics update",
         )
 
     async def _run_statistics_update(self) -> None:
