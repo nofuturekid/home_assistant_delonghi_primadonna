@@ -300,6 +300,7 @@ class DelongiPrimadonna:
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
         self._stats_lock = asyncio.Lock()
+        self._initialization_task: asyncio.Task | None = None
         machine = get_machine_model(self.product_code)
         self.model = (
             machine.name if machine and machine.name else 'Prima Donna'
@@ -347,6 +348,24 @@ class DelongiPrimadonna:
         if len(self.available_beverages) <= 1:
             # Fallback to legacy enum if no recipes
             self.available_beverages = [*AvailableBeverage]
+
+    def set_initialization_task(self, task: asyncio.Task) -> None:
+        """Track the device initialization task."""
+        self._initialization_task = task
+
+    async def cancel_initialization(self) -> None:
+        """Cancel and wait for device initialization."""
+        task = self._initialization_task
+        self._initialization_task = None
+
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     async def disconnect(self):
         """Disconnect from the device."""
@@ -732,9 +751,9 @@ class DelongiPrimadonna:
             except asyncio.exceptions.TimeoutError as error:
                 self.connected = False
                 _LOGGER.info('TimeoutError: %s at device connection', error)
-            except asyncio.exceptions.CancelledError as error:
+            except asyncio.CancelledError:
                 self.connected = False
-                _LOGGER.warning('CancelledError: %s', error)
+                raise
 
         if self.connected and not self._profiles_loaded:
             command = BYTES_LOAD_PROFILES.copy()
