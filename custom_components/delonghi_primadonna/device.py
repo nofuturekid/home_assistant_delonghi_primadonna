@@ -456,6 +456,7 @@ class DelongiPrimadonna:
             self._client = client
 
             try:
+                self._rx_buffer.clear()
                 await asyncio.wait_for(
                     client.start_notify(
                         uuid.UUID(CONTROLL_CHARACTERISTIC),

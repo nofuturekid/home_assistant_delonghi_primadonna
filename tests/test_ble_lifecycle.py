@@ -138,6 +138,35 @@ async def test_connect_success():
     assert device._connecting is False
 
 
+async def test_connect_clears_receive_buffer_before_notifications():
+    device = make_device()
+    device._rx_buffer.extend(
+        b"\\xd0\\x41\\xa2\\x0f\\x00"
+    )
+    client = FakeConnectClient()
+
+    observed_buffer = None
+    original_start_notify = client.start_notify
+
+    async def inspecting_start_notify(
+        characteristic,
+        callback,
+    ):
+        nonlocal observed_buffer
+        observed_buffer = bytes(device._rx_buffer)
+        await original_start_notify(
+            characteristic,
+            callback,
+        )
+
+    client.start_notify = inspecting_start_notify
+
+    await run_with_fake_connection(device, client)
+
+    assert observed_buffer == b""
+    assert device._rx_buffer == bytearray()
+
+
 async def test_notify_failure_disconnects_client():
     device = make_device()
     client = FakeConnectClient(
@@ -378,6 +407,7 @@ async def test_statistics_schedule_respects_throttle():
 
 async def run_tests():
     await test_connect_success()
+    await test_connect_clears_receive_buffer_before_notifications()
     await test_notify_failure_disconnects_client()
     await test_connect_cancellation_disconnects_client()
     await test_write_bleak_error_disconnects_client()
