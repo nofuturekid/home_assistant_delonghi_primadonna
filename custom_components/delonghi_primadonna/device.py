@@ -543,6 +543,16 @@ class DelongiPrimadonna:
             )
         _LOGGER.info('Event triggered: %s', event_data)
 
+    @staticmethod
+    def _has_valid_crc(packet: bytes) -> bool:
+        """Return whether an assembled BLE packet has a valid CRC."""
+        if len(packet) < 4:
+            return False
+
+        expected_crc = int.from_bytes(packet[-2:], byteorder='big')
+        actual_crc = crc_hqx(packet[:-2], 0x1D0F)
+        return actual_crc == expected_crc
+
     async def _process_raw_data(self, sender, value):
         """Assemble incoming BLE packets and pass complete messages."""
         self._rx_buffer.extend(value)
@@ -568,6 +578,15 @@ class DelongiPrimadonna:
                 return
 
             packet = bytes(self._rx_buffer[:msg_len])
+
+            if not self._has_valid_crc(packet):
+                _LOGGER.debug(
+                    "Discarding invalid BLE frame candidate: %s",
+                    hexlify(packet, " "),
+                )
+                del self._rx_buffer[0]
+                continue
+
             del self._rx_buffer[:msg_len]
             await self._handle_data(sender, packet)
 

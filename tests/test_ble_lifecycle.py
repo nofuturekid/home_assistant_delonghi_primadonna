@@ -173,6 +173,56 @@ async def test_connect_clears_receive_buffer_before_notifications():
     assert device._rx_buffer == bytearray()
 
 
+RX_TEST_PACKET = bytes.fromhex(
+    "d0 41 a2 0f 00 64 2d 34 3b 42 49 50 57 5e 65 6c "
+    "73 7a 81 88 8f 96 9d a4 ab b2 b9 c0 c7 ce d5 dc "
+    "e3 ea f1 f8 ff 06 0d 14 1b 22 29 30 37 3e 45 4c "
+    "53 5a 61 68 6f 76 7d 84 8b 92 99 a0 a7 ae b5 bc "
+    "05 97"
+)
+
+
+async def test_receive_buffer_reassembles_fragmented_packet():
+    device = make_device()
+    handled_packets = []
+
+    async def capture_packet(_sender, packet):
+        handled_packets.append(bytes(packet))
+
+    device._handle_data = capture_packet
+
+    await device._process_raw_data(None, RX_TEST_PACKET[:20])
+
+    assert handled_packets == []
+    assert device._rx_buffer == bytearray(RX_TEST_PACKET[:20])
+
+    await device._process_raw_data(None, RX_TEST_PACKET[20:])
+
+    assert handled_packets == [RX_TEST_PACKET]
+    assert device._rx_buffer == bytearray()
+
+
+async def test_receive_buffer_recovers_from_restarted_frame():
+    device = make_device()
+    handled_packets = []
+
+    async def capture_packet(_sender, packet):
+        handled_packets.append(bytes(packet))
+
+    device._handle_data = capture_packet
+
+    await device._process_raw_data(None, RX_TEST_PACKET[:20])
+
+    assert handled_packets == []
+
+    # Reproduce the live failure: after a 20-byte partial packet, the
+    # device restarts transmission from the beginning of the same frame.
+    await device._process_raw_data(None, RX_TEST_PACKET)
+
+    assert handled_packets == [RX_TEST_PACKET]
+    assert device._rx_buffer == bytearray()
+
+
 async def test_notify_failure_disconnects_client():
     device = make_device()
     client = FakeConnectClient(
@@ -416,6 +466,8 @@ async def test_statistics_schedule_respects_throttle():
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
+    await test_receive_buffer_reassembles_fragmented_packet()
+    await test_receive_buffer_recovers_from_restarted_frame()
     await test_notify_failure_disconnects_client()
     await test_connect_cancellation_disconnects_client()
     await test_write_bleak_error_disconnects_client()
