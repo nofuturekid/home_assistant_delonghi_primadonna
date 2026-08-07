@@ -1,0 +1,237 @@
+import asyncio
+import os
+import sys
+from binascii import hexlify, unhexlify
+
+sys.path.append(
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "custom_components",
+        )
+    )
+)
+
+import delonghi_primadonna.device as device_module  # noqa: E402
+from delonghi_primadonna.const import BYTES_STATISTICS_COMMAND  # noqa: E402
+from delonghi_primadonna.device import DelongiPrimadonna  # noqa: E402
+
+CONFIG = {
+    "mac": "00:11:22:33:44:55",
+    "model": "TEST",
+    "name": "TEST",
+}
+
+LOG_PACKET = unhexlify(
+    "d041a20f00640013a89e00650000000a"
+    "00690000000f006a002365e8006c0000"
+    "0000006d00000000006f000000120074"
+    "000002840284000000000bb80000397e"
+    "54d1"
+)
+
+
+def make_device():
+    return DelongiPrimadonna(CONFIG, None)
+
+
+async def no_event(_value):
+    return None
+
+
+def statistics_message(start_index=100, count=10):
+    message = list(BYTES_STATISTICS_COMMAND)
+    message[4] = (start_index >> 8) & 0xFF
+    message[5] = start_index & 0xFF
+    message[6] = count
+    return message
+
+
+async def test_matching_statistics_response():
+    device = make_device()
+    device._expected_statistics_start = 100
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(LOG_PACKET, " ")
+    device._event_trigger = no_event
+
+    await device._handle_data(None, LOG_PACKET)
+
+    assert device._response_event.is_set()
+    assert device.statistics[100] == 1288350
+    assert device.statistics[105] == 15
+
+
+async def test_wrong_statistics_start_is_ignored():
+    device = make_device()
+    device._expected_statistics_start = 110
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(LOG_PACKET, " ")
+    device._event_trigger = no_event
+
+    await device._handle_data(None, LOG_PACKET)
+
+    assert not device._response_event.is_set()
+    assert 100 not in device.statistics
+    assert 105 not in device.statistics
+
+
+async def test_short_statistics_response_is_ignored():
+    device = make_device()
+    packet = bytes(
+        [0xD0, 0x05, 0xA2, 0x0F, 0x00, 0x64]
+    )
+
+    device._expected_statistics_start = 100
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(packet, " ")
+    device._event_trigger = no_event
+
+    await device._handle_data(None, packet)
+
+    assert not device._response_event.is_set()
+    assert not device.statistics
+
+
+async def test_stale_statistics_response_is_ignored():
+    device = make_device()
+    device._expected_statistics_start = None
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(LOG_PACKET, " ")
+    device._event_trigger = no_event
+
+    await device._handle_data(None, LOG_PACKET)
+
+    assert not device._response_event.is_set()
+    assert not device.statistics
+
+
+async def test_monitor_packet_does_not_release_statistics_waiter():
+    device = make_device()
+    packet = bytes([0xD0, 0x02, 0x70])
+
+    device._expected_statistics_start = 100
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(packet, " ")
+    device._event_trigger = no_event
+
+    original_parser = device_module.parse_monitor_data
+    device_module.parse_monitor_data = lambda _value: None
+    try:
+        await device._handle_data(None, packet)
+    finally:
+        device_module.parse_monitor_data = original_parser
+
+    assert not device._response_event.is_set()
+
+
+class FakeClient:
+    is_connected = True
+
+    async def write_gatt_char(
+        self,
+        _characteristic,
+        _message,
+    ):
+        return None
+
+
+async def fake_connect():
+    return None
+
+
+async def test_timeout_clears_pending_response_state():
+    device = make_device()
+    device._client = FakeClient()
+    device._connect = fake_connect
+
+    original_wait_for = device_module.asyncio.wait_for
+
+    async def immediate_timeout(awaitable, timeout):
+        del timeout
+        close = getattr(awaitable, "close", None)
+        if close is not None:
+            close()
+        raise asyncio.TimeoutError
+
+    device_module.asyncio.wait_for = immediate_timeout
+    try:
+        result = await device.send_command(
+            statistics_message(),
+            retries=1,
+        )
+    finally:
+        device_module.asyncio.wait_for = original_wait_for
+
+    assert result is False
+    assert device._response_event is None
+    assert device._expected_statistics_start is None
+
+
+async def test_cancellation_clears_pending_response_state():
+    device = make_device()
+    device._client = FakeClient()
+    device._connect = fake_connect
+
+    task = asyncio.create_task(
+        device.send_command(
+            statistics_message(),
+            retries=1,
+        )
+    )
+
+    for _ in range(20):
+        if device._response_event is not None:
+            break
+        await asyncio.sleep(0)
+
+    assert device._response_event is not None
+
+    task.cancel()
+
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError(
+            "send_command did not propagate cancellation"
+        )
+
+    assert device._response_event is None
+    assert device._expected_statistics_start is None
+
+
+async def test_failed_first_range_aborts_statistics_batch():
+    device = make_device()
+    calls = []
+
+    async def failed_statistics(start_index, count):
+        calls.append((start_index, count))
+        return False
+
+    device.get_statistics = failed_statistics
+
+    await device.update_statistics()
+
+    assert calls == [(100, 10)]
+
+
+async def run_tests():
+    await test_matching_statistics_response()
+    await test_wrong_statistics_start_is_ignored()
+    await test_short_statistics_response_is_ignored()
+    await test_stale_statistics_response_is_ignored()
+    await test_monitor_packet_does_not_release_statistics_waiter()
+    await test_timeout_clears_pending_response_state()
+    await test_cancellation_clears_pending_response_state()
+    await test_failed_first_range_aborts_statistics_batch()
+
+    print(
+        "[SUCCESS] BLE response correlation "
+        "regressions verified."
+    )
+
+
+if __name__ == "__main__":
+    asyncio.run(run_tests())

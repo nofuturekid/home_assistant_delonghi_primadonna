@@ -296,6 +296,7 @@ class DelongiPrimadonna:
         self._lock = asyncio.Lock()
         self._rx_buffer = bytearray()
         self._response_event = None
+        self._expected_statistics_start: int | None = None
         self._last_response: bytes | None = None
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
@@ -570,12 +571,15 @@ class DelongiPrimadonna:
 
     async def _handle_data(self, sender, value):
         """Handle notifications from the device."""
-        if (
-            self._response_event is not None
-            and not self._response_event.is_set()
-        ):
-            self._response_event.set()
         answer_id = value[2] if len(value) > 2 else None
+        expected_statistics_start = self._expected_statistics_start
+        statistics_response_matches = (
+            expected_statistics_start is not None
+            and answer_id == 0xA2
+            and len(value) >= 12
+            and ((value[4] << 8) | value[5])
+            == expected_statistics_start
+        )
 
         if answer_id in [0x75, 0x70]:
             monitor_data = parse_monitor_data(value)
@@ -608,7 +612,32 @@ class DelongiPrimadonna:
             if profile_id is not None and status == 0:
                 self.active_profile_id = profile_id
         elif answer_id == 0xA2:
-            await self._parse_statistics(value)
+            if statistics_response_matches:
+                await self._parse_statistics(value)
+            else:
+                response_start = (
+                    ((value[4] << 8) | value[5])
+                    if len(value) > 5
+                    else None
+                )
+                _LOGGER.debug(
+                    "Ignoring unexpected statistics response: "
+                    "expected start %s, got %s",
+                    expected_statistics_start,
+                    response_start,
+                )
+
+        if (
+            self._response_event is not None
+            and not self._response_event.is_set()
+        ):
+            response_matches = (
+                statistics_response_matches
+                if expected_statistics_start is not None
+                else answer_id != 0xA2
+            )
+            if response_matches:
+                self._response_event.set()
 
         hex_value = hexlify(value, ' ')
 
@@ -837,7 +866,7 @@ class DelongiPrimadonna:
         message = [int(x, 16) for x in command.split(' ')]
         await self.send_command(message)
 
-    async def send_command(self, message, retries=3):
+    async def send_command(self, message, retries=3) -> bool:
         async with self._lock:
             message_to_send = copy.deepcopy(message)
             for attempt in range(retries):
@@ -851,23 +880,40 @@ class DelongiPrimadonna:
                         'Send command: %s',
                         hexlify(bytearray(message_to_send), " ")
                     )
+
                     self._response_event = asyncio.Event()
-                    await self._client.write_gatt_char(
-                        CONTROLL_CHARACTERISTIC, bytearray(message_to_send)
-                    )
+                    if (
+                        len(message_to_send) > 5
+                        and message_to_send[2] == 0xA2
+                    ):
+                        self._expected_statistics_start = (
+                            message_to_send[4] << 8
+                        ) | message_to_send[5]
+                    else:
+                        self._expected_statistics_start = None
+
+                    response_received = False
                     try:
-                        await asyncio.wait_for(
-                            self._response_event.wait(),
-                            timeout=10,
+                        await self._client.write_gatt_char(
+                            CONTROLL_CHARACTERISTIC,
+                            bytearray(message_to_send),
                         )
-                    except asyncio.TimeoutError:
-                        _LOGGER.warning(
-                            'Timeout waiting for response to command: %s',
-                            hexlify(bytearray(message_to_send), " ")
-                        )
+                        try:
+                            await asyncio.wait_for(
+                                self._response_event.wait(),
+                                timeout=10,
+                            )
+                            response_received = True
+                        except asyncio.TimeoutError:
+                            _LOGGER.warning(
+                                'Timeout waiting for response to command: %s',
+                                hexlify(bytearray(message_to_send), " ")
+                            )
                     finally:
                         self._response_event = None
-                    return
+                        self._expected_statistics_start = None
+
+                    return response_received
                 except BleakError as error:
                     self.connected = False
                     _LOGGER.warning(
@@ -885,7 +931,9 @@ class DelongiPrimadonna:
                             pass
                     self._client = None
                     await asyncio.sleep(2)
+
             _LOGGER.error('Failed to send command after %d attempts', retries)
+            return False
 
     async def _parse_statistics(self, data: bytes) -> None:
         """Parse statistics response"""
@@ -950,32 +998,37 @@ class DelongiPrimadonna:
 
             self._last_stats_request = current_time
             # Maintenance counters (100-109)
-            await self.get_statistics(100, 10)
+            if not await self.get_statistics(100, 10):
+                return
             await asyncio.sleep(0.3)
 
             # Extended maintenance (110-119)
-            await self.get_statistics(110, 10)
+            if not await self.get_statistics(110, 10):
+                return
             await asyncio.sleep(0.3)
 
             # Coffee beverage totals (3000-3009)
-            await self.get_statistics(3000, 10)
+            if not await self.get_statistics(3000, 10):
+                return
             await asyncio.sleep(0.3)
 
             # Request additional coffee totals range
             # Covers: 3077-3080 (3077 is combined with 3000 for total coffee)
-            await self.get_statistics(3077, 4)
+            if not await self.get_statistics(3077, 4):
+                return
             await asyncio.sleep(0.3)
 
             # Request cold milk, choco and tea statistics
             # Covers: 3017-3026 (3017=cold milk, 3021=choco, 3025=tea)
-            await self.get_statistics(3017, 10)
+            if not await self.get_statistics(3017, 10):
+                return
             await asyncio.sleep(0.3)
 
-    async def get_statistics(self, start_index: int, count: int) -> None:
+    async def get_statistics(self, start_index: int, count: int) -> bool:
         """Get statistics from the machine"""
         message = copy.deepcopy(BYTES_STATISTICS_COMMAND)
         message[4] = (start_index >> 8) & 0xFF
         message[5] = start_index & 0xFF
         message[6] = count
 
-        await self.send_command(message)
+        return await self.send_command(message)
