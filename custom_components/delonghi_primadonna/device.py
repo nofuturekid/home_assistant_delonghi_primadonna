@@ -300,6 +300,7 @@ class DelongiPrimadonna:
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
         self._stats_lock = asyncio.Lock()
+        self._statistics_task: asyncio.Task | None = None
         self._initialization_task: asyncio.Task | None = None
         machine = get_machine_model(self.product_code)
         self.model = (
@@ -357,6 +358,42 @@ class DelongiPrimadonna:
         """Cancel and wait for device initialization."""
         task = self._initialization_task
         self._initialization_task = None
+
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    def schedule_statistics_update(self) -> None:
+        """Schedule a statistics update when needed."""
+        task = self._statistics_task
+        if task is not None and not task.done():
+            return
+
+        if time.monotonic() - self._last_stats_request < 60:
+            return
+
+        self._statistics_task = self._hass.async_create_task(
+            self._run_statistics_update()
+        )
+
+    async def _run_statistics_update(self) -> None:
+        """Run a managed statistics update."""
+        try:
+            await self.update_statistics()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _LOGGER.exception("Statistics update failed")
+
+    async def cancel_statistics_update(self) -> None:
+        """Cancel and wait for a pending statistics update."""
+        task = self._statistics_task
+        self._statistics_task = None
 
         if task is None or task.done():
             return

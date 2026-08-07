@@ -83,7 +83,6 @@ async def async_setup_entry(
         ]
     )
 
-    hass.async_create_task(delongh_device.update_statistics())
     return True
 
 
@@ -248,9 +247,7 @@ class DelongiPrimadonnaStatisticsSensor(
     async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
         if self.device.connected:
-            self.hass.async_create_task(
-                self.device.update_statistics()
-            )
+            self.device.schedule_statistics_update()
 
 
 class DelongiPrimadonnaUtilitySensor(DelongiPrimadonnaStatisticsSensor):
