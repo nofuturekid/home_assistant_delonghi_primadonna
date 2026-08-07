@@ -15,8 +15,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
 
-from bleak import BleakClient
 from bleak.exc import BleakDBusError, BleakError
+from bleak_retry_connector import (BleakClientWithServiceCache,
+                                   establish_connection)
 from homeassistant.components import bluetooth
 from homeassistant.const import CONF_MAC, CONF_MODEL, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -371,66 +372,67 @@ class DelongiPrimadonna:
                 self._client = None
                 self.connected = False
 
-    async def _connect(self, retries=3):
+    async def _connect(self):
         """Connect to the device."""
+        if self._client is not None and self._client.is_connected:
+            return
+
+        self._client = None
+        self.connected = False
         self._connecting = True
-        last_error = None
-        for attempt in range(retries):
-            try:
-                if self._client is None or not self._client.is_connected:
-                    self._device = bluetooth.async_ble_device_from_address(
-                        self._hass, self.mac, connectable=True
-                    )
-                    if not self._device:
-                        raise BleakError(
-                            (
-                                f"A device with address {self.mac}"
-                                " could not be found."
-                            )
-                        )
-                    self._client = BleakClient(self._device)
-                    _LOGGER.info(
-                        "Connect to %s (attempt %d)",
-                        self.mac,
-                        attempt + 1,
-                    )
-                    await asyncio.wait_for(
-                        self._client.connect(),
-                        timeout=10,
-                    )
-                    # Service discovery is performed during the connection
-                    # process. Accessing ``get_services`` directly raises a
-                    # ``FutureWarning`` in recent versions of Bleak.
-                    # ``self._client.services`` will contain the discovered
-                    # services once the connection succeeds.
-                    await asyncio.wait_for(
-                        self._client.start_notify(
-                            uuid.UUID(CONTROLL_CHARACTERISTIC),
-                            self._process_raw_data,
-                        ),
-                        timeout=10,
-                    )
-                self._connecting = False
-                return
-            except Exception as error:
-                _LOGGER.warning(
-                    "BLE connect error: %s (type: %s, attempt %d)",
-                    error,
-                    type(error).__name__,
-                    attempt + 1,
+        try:
+            self._device = bluetooth.async_ble_device_from_address(
+                self._hass, self.mac, connectable=True
+            )
+            if not self._device:
+                raise BleakError(
+                    f"A device with address {self.mac} could not be found."
                 )
-                if self._client is not None:
-                    try:
-                        await asyncio.wait_for(
-                            self._client.disconnect(), timeout=5
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                self._client = None
-                last_error = error
-                await asyncio.sleep(2)
-        self._connecting = False
-        raise last_error
+
+            _LOGGER.info("Connect to %s", self.mac)
+            client = await establish_connection(
+                BleakClientWithServiceCache,
+                self._device,
+                self.name or self.mac,
+                max_attempts=3,
+            )
+            self._client = client
+
+            try:
+                await asyncio.wait_for(
+                    client.start_notify(
+                        uuid.UUID(CONTROLL_CHARACTERISTIC),
+                        self._process_raw_data,
+                    ),
+                    timeout=10,
+                )
+            except asyncio.CancelledError:
+                try:
+                    await asyncio.wait_for(client.disconnect(), timeout=5)
+                except Exception:  # noqa: BLE001
+                    pass
+                finally:
+                    self._client = None
+                raise
+            except Exception:
+                try:
+                    await asyncio.wait_for(client.disconnect(), timeout=5)
+                except Exception:  # noqa: BLE001
+                    pass
+                finally:
+                    self._client = None
+                raise
+
+        except Exception as error:
+            self.connected = False
+            _LOGGER.warning(
+                "BLE connect error: %s (type: %s)",
+                error,
+                type(error).__name__,
+            )
+            raise
+        finally:
+            self._connecting = False
 
     def _make_switch_command(self):
         """Make hex command"""
@@ -812,12 +814,20 @@ class DelongiPrimadonna:
                     return
                 except BleakError as error:
                     self.connected = False
-                    self._client = None
                     _LOGGER.warning(
                         'BleakError: %s (attempt %d)',
                         error,
                         attempt + 1
                     )
+                    if self._client is not None:
+                        try:
+                            await asyncio.wait_for(
+                                self._client.disconnect(),
+                                timeout=5,
+                            )
+                        except Exception:  # noqa: BLE001
+                            pass
+                    self._client = None
                     await asyncio.sleep(2)
             _LOGGER.error('Failed to send command after %d attempts', retries)
 
