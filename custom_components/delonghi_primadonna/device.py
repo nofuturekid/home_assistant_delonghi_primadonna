@@ -1024,8 +1024,8 @@ class DelongiPrimadonna:
                 return
             await asyncio.sleep(0.3)
 
-            # Extended maintenance (110-119)
-            if not await self.get_statistics(110, 10):
+            # Continue sparse statistics from parameter 111
+            if not await self.get_statistics(111, 10):
                 return
             await asyncio.sleep(0.3)
 

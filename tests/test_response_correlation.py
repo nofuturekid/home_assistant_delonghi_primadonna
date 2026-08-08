@@ -32,6 +32,15 @@ LOG_PACKET = unhexlify(
 )
 
 
+SPARSE_111_PACKET = unhexlify(
+    "d041a20f006f000000110074000000c9"
+    "00c90000001f0bb800000c570bb90000"
+    "00980bba0000007c0bbb000000030bbc"
+    "000000230bbd000000230bbe00000089"
+    "1941"
+)
+
+
 def make_device():
     return DelongiPrimadonna(CONFIG, None)
 
@@ -74,6 +83,39 @@ async def test_wrong_statistics_start_is_ignored():
     assert not device._response_event.is_set()
     assert 100 not in device.statistics
     assert 105 not in device.statistics
+
+
+async def test_sparse_statistics_response_matches_111():
+    device = make_device()
+    device._expected_statistics_start = 111
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(SPARSE_111_PACKET, " ")
+    device._event_trigger = no_event
+
+    assert device._has_valid_crc(SPARSE_111_PACKET)
+
+    await device._process_raw_data(None, SPARSE_111_PACKET)
+
+    assert device._response_event.is_set()
+    assert device.statistics[111] == 17
+    assert device.statistics[116] == 201
+    assert device.statistics[3000] == 3159
+    assert device.statistics[3006] == 137
+
+
+async def test_sparse_statistics_response_does_not_match_110():
+    device = make_device()
+    device._expected_statistics_start = 110
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(SPARSE_111_PACKET, " ")
+    device._event_trigger = no_event
+
+    assert device._has_valid_crc(SPARSE_111_PACKET)
+
+    await device._process_raw_data(None, SPARSE_111_PACKET)
+
+    assert not device._response_event.is_set()
+    assert not device.statistics
 
 
 async def test_short_statistics_response_is_ignored():
@@ -142,12 +184,14 @@ class RespondingFakeClient:
     def __init__(self, device, response):
         self._device = device
         self._response = response
+        self.last_message = None
 
     async def write_gatt_char(
         self,
         _characteristic,
         _message,
     ):
+        self.last_message = bytes(_message)
         await self._device._handle_data(
             None,
             self._response,
@@ -175,6 +219,31 @@ async def test_matching_statistics_command_returns_true():
     assert result is True
     assert device.statistics[100] == 1288350
     assert device.statistics[105] == 15
+    assert device._response_event is None
+    assert device._expected_statistics_start is None
+
+
+async def test_matching_sparse_statistics_command_returns_true():
+    device = make_device()
+    device._device_status = hexlify(SPARSE_111_PACKET, " ")
+    client = RespondingFakeClient(
+        device,
+        SPARSE_111_PACKET,
+    )
+    device._client = client
+    device._connect = fake_connect
+
+    result = await device.send_command(
+        statistics_message(111),
+        retries=1,
+    )
+
+    assert result is True
+    assert client.last_message == unhexlify(
+        "0d08a20f006f0aff6d"
+    )
+    assert device.statistics[111] == 17
+    assert device.statistics[3000] == 3159
     assert device._response_event is None
     assert device._expected_statistics_start is None
 
@@ -285,17 +354,53 @@ async def test_failed_first_range_aborts_statistics_batch():
     assert calls == [(100, 10)]
 
 
+async def test_statistics_polling_starts_second_block_at_111():
+    device = make_device()
+    calls = []
+
+    async def successful_statistics(start_index, count):
+        calls.append((start_index, count))
+        return True
+
+    async def no_sleep(_delay):
+        return None
+
+    device.get_statistics = successful_statistics
+    device._last_stats_request = (
+        device_module.time.monotonic() - 61
+    )
+
+    original_sleep = device_module.asyncio.sleep
+    device_module.asyncio.sleep = no_sleep
+    try:
+        await device.update_statistics()
+    finally:
+        device_module.asyncio.sleep = original_sleep
+
+    assert calls == [
+        (100, 10),
+        (111, 10),
+        (3000, 10),
+        (3077, 4),
+        (3017, 10),
+    ]
+
+
 async def run_tests():
     await test_matching_statistics_response()
     await test_wrong_statistics_start_is_ignored()
+    await test_sparse_statistics_response_matches_111()
+    await test_sparse_statistics_response_does_not_match_110()
     await test_short_statistics_response_is_ignored()
     await test_stale_statistics_response_is_ignored()
     await test_monitor_packet_does_not_release_statistics_waiter()
     await test_matching_statistics_command_returns_true()
+    await test_matching_sparse_statistics_command_returns_true()
     await test_non_statistics_command_returns_true()
     await test_timeout_clears_pending_response_state()
     await test_cancellation_clears_pending_response_state()
     await test_failed_first_range_aborts_statistics_batch()
+    await test_statistics_polling_starts_second_block_at_111()
 
     print(
         "[SUCCESS] BLE response correlation "
