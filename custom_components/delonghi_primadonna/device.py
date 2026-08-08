@@ -595,12 +595,15 @@ class DelongiPrimadonna:
         """Handle notifications from the device."""
         answer_id = value[2] if len(value) > 2 else None
         expected_statistics_start = self._expected_statistics_start
+        response_start = (
+            ((value[4] << 8) | value[5])
+            if answer_id == 0xA2 and len(value) >= 12
+            else None
+        )
         statistics_response_matches = (
             expected_statistics_start is not None
-            and answer_id == 0xA2
-            and len(value) >= 12
-            and ((value[4] << 8) | value[5])
-            == expected_statistics_start
+            and response_start is not None
+            and response_start >= expected_statistics_start
         )
 
         if answer_id in [0x75, 0x70]:
@@ -637,14 +640,9 @@ class DelongiPrimadonna:
             if statistics_response_matches:
                 await self._parse_statistics(value)
             else:
-                response_start = (
-                    ((value[4] << 8) | value[5])
-                    if len(value) > 5
-                    else None
-                )
                 _LOGGER.debug(
                     "Ignoring unexpected statistics response: "
-                    "expected start %s, got %s",
+                    "expected start >= %s, got %s",
                     expected_statistics_start,
                     response_start,
                 )
@@ -1035,15 +1033,15 @@ class DelongiPrimadonna:
                 return
             await asyncio.sleep(0.3)
 
-            # Request additional coffee totals range
-            # Covers: 3077-3080 (3077 is combined with 3000 for total coffee)
-            if not await self.get_statistics(3077, 4):
-                return
-            await asyncio.sleep(0.3)
-
             # Request cold milk, choco and tea statistics
             # Covers: 3017-3026 (3017=cold milk, 3021=choco, 3025=tea)
             if not await self.get_statistics(3017, 10):
+                return
+            await asyncio.sleep(0.3)
+
+            # Request optional additional coffee totals range
+            # Covers: 3077-3080 (3077 is combined with 3000 for total coffee)
+            if not await self.get_statistics(3077, 4):
                 return
             await asyncio.sleep(0.3)
 

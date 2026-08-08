@@ -103,7 +103,7 @@ async def test_sparse_statistics_response_matches_111():
     assert device.statistics[3006] == 137
 
 
-async def test_sparse_statistics_response_does_not_match_110():
+async def test_sparse_statistics_response_advances_from_110_to_111():
     device = make_device()
     device._expected_statistics_start = 110
     device._response_event = asyncio.Event()
@@ -114,8 +114,34 @@ async def test_sparse_statistics_response_does_not_match_110():
 
     await device._process_raw_data(None, SPARSE_111_PACKET)
 
-    assert not device._response_event.is_set()
-    assert not device.statistics
+    assert device._response_event.is_set()
+    assert device.statistics[111] == 17
+    assert device.statistics[116] == 201
+
+
+async def test_sparse_statistics_response_advances_from_3077_to_23000():
+    device = make_device()
+    packet = bytes.fromhex(
+        "d0 1d a2 0f 59 d8 00 00 00 07 "
+        "59 d9 00 00 26 d0 "
+        "59 da 00 00 00 69 "
+        "59 db 00 00 01 92 "
+        "00 ce"
+    )
+    device._expected_statistics_start = 3077
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(packet, " ")
+    device._event_trigger = no_event
+
+    assert device._has_valid_crc(packet)
+
+    await device._process_raw_data(None, packet)
+
+    assert device._response_event.is_set()
+    assert device.statistics[23000] == 7
+    assert device.statistics[23001] == 9936
+    assert device.statistics[23003] == 402
+    assert 3077 not in device.statistics
 
 
 async def test_short_statistics_response_is_ignored():
@@ -381,8 +407,8 @@ async def test_statistics_polling_starts_second_block_at_111():
         (100, 10),
         (111, 10),
         (3000, 10),
-        (3077, 4),
         (3017, 10),
+        (3077, 4),
     ]
 
 
@@ -390,7 +416,8 @@ async def run_tests():
     await test_matching_statistics_response()
     await test_wrong_statistics_start_is_ignored()
     await test_sparse_statistics_response_matches_111()
-    await test_sparse_statistics_response_does_not_match_110()
+    await test_sparse_statistics_response_advances_from_110_to_111()
+    await test_sparse_statistics_response_advances_from_3077_to_23000()
     await test_short_statistics_response_is_ignored()
     await test_stale_statistics_response_is_ignored()
     await test_monitor_packet_does_not_release_statistics_waiter()
