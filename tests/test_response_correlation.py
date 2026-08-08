@@ -136,8 +136,76 @@ class FakeClient:
         return None
 
 
+class RespondingFakeClient:
+    is_connected = True
+
+    def __init__(self, device, response):
+        self._device = device
+        self._response = response
+
+    async def write_gatt_char(
+        self,
+        _characteristic,
+        _message,
+    ):
+        await self._device._handle_data(
+            None,
+            self._response,
+        )
+
+
 async def fake_connect():
     return None
+
+
+async def test_matching_statistics_command_returns_true():
+    device = make_device()
+    device._device_status = hexlify(LOG_PACKET, " ")
+    device._client = RespondingFakeClient(
+        device,
+        LOG_PACKET,
+    )
+    device._connect = fake_connect
+
+    result = await device.send_command(
+        statistics_message(),
+        retries=1,
+    )
+
+    assert result is True
+    assert device.statistics[100] == 1288350
+    assert device.statistics[105] == 15
+    assert device._response_event is None
+    assert device._expected_statistics_start is None
+
+
+async def test_non_statistics_command_returns_true():
+    device = make_device()
+    response = bytes([0xD0, 0x02, 0x84])
+    device._device_status = hexlify(response, " ")
+    device._client = RespondingFakeClient(
+        device,
+        response,
+    )
+    device._connect = fake_connect
+
+    result = await device.send_command(
+        [
+            0x0D,
+            0x07,
+            0x84,
+            0x0F,
+            0x02,
+            0x01,
+            0x00,
+            0x00,
+        ],
+        retries=1,
+    )
+
+    assert result is True
+    assert device._response_event is None
+    assert device._expected_statistics_start is None
 
 
 async def test_timeout_clears_pending_response_state():
@@ -223,6 +291,8 @@ async def run_tests():
     await test_short_statistics_response_is_ignored()
     await test_stale_statistics_response_is_ignored()
     await test_monitor_packet_does_not_release_statistics_waiter()
+    await test_matching_statistics_command_returns_true()
+    await test_non_statistics_command_returns_true()
     await test_timeout_clears_pending_response_state()
     await test_cancellation_clears_pending_response_state()
     await test_failed_first_range_aborts_statistics_batch()
