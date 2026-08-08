@@ -488,6 +488,71 @@ async def test_statistics_task_deduplicates_and_cancels():
     assert first_task.cancelled()
 
 
+async def test_failed_statistics_attempt_is_throttled():
+    hass = FakeHass()
+    device = make_device(hass)
+    calls = []
+
+    async def failed_statistics(start_index, count):
+        calls.append((start_index, count))
+        return False
+
+    device.get_statistics = failed_statistics
+    device._last_stats_request = 0.0
+
+    before = time.monotonic()
+    await device.update_statistics()
+    after = time.monotonic()
+
+    assert calls == [(100, 10)]
+    assert before <= device._last_stats_request <= after
+
+    device.schedule_statistics_update()
+
+    assert device._statistics_task is None
+    assert hass.background_tasks == []
+
+
+async def test_statistics_update_exception_is_contained_and_reschedulable():
+    hass = FakeHass()
+    device = make_device(hass)
+    calls = 0
+
+    async def failing_statistics_update():
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("statistics failed")
+
+    device.update_statistics = failing_statistics_update
+    device._last_stats_request = 0.0
+
+    device.schedule_statistics_update()
+    first_task = device._statistics_task
+
+    assert first_task is not None
+
+    await first_task
+
+    assert first_task.done()
+    assert not first_task.cancelled()
+    assert device._statistics_task is first_task
+    assert calls == 1
+
+    device.schedule_statistics_update()
+    second_task = device._statistics_task
+
+    assert second_task is not None
+    assert second_task is not first_task
+
+    await second_task
+
+    assert second_task.done()
+    assert not second_task.cancelled()
+    assert device._statistics_task is second_task
+    assert calls == 2
+    assert len(hass.background_tasks) == 2
+
+
 async def test_statistics_schedule_respects_throttle():
     hass = FakeHass()
     device = make_device(hass)
@@ -515,6 +580,8 @@ async def run_tests():
     await test_tracker_deduplicates_and_cancels_update()
 
     await test_statistics_task_deduplicates_and_cancels()
+    await test_failed_statistics_attempt_is_throttled()
+    await test_statistics_update_exception_is_contained_and_reschedulable()
     await test_statistics_schedule_respects_throttle()
 
     print(

@@ -1014,12 +1014,13 @@ class DelongiPrimadonna:
 
         async with self._stats_lock:
             current_time = time.monotonic()
-            # Update at most once every 60 seconds
+            # Attempt statistics polling at most once every 60 seconds,
+            # including failed attempts, to avoid repeated BLE retries.
             if current_time - self._last_stats_request < 60:
                 return
 
             self._last_stats_request = current_time
-            # Maintenance counters (100-109)
+            # Start sparse statistics sequence at parameter 100
             if not await self.get_statistics(100, 10):
                 return
             await asyncio.sleep(0.3)
