@@ -465,6 +465,7 @@ class DelongiPrimadonna:
                     ),
                     timeout=10,
                 )
+                self.connected = True
             except asyncio.CancelledError:
                 try:
                     await asyncio.wait_for(client.disconnect(), timeout=5)

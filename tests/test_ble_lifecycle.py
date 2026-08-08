@@ -139,6 +139,7 @@ async def test_connect_success():
     await run_with_fake_connection(device, client)
 
     assert device._client is client
+    assert device.connected is True
     assert client.start_notify_calls == 1
     assert client.disconnect_calls == 0
     assert device._connecting is False
