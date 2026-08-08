@@ -203,6 +203,42 @@ async def test_receive_buffer_reassembles_fragmented_packet():
     assert device._rx_buffer == bytearray()
 
 
+async def test_receive_buffer_discards_invalid_crc_packet():
+    device = make_device()
+    handled_packets = []
+
+    assert device._has_valid_crc(RX_TEST_PACKET)
+
+    corrupted_packet = bytearray(RX_TEST_PACKET)
+    corrupted_packet[-1] ^= 0x01
+    corrupted_packet = bytes(corrupted_packet)
+
+    assert not device._has_valid_crc(corrupted_packet)
+
+    device._expected_statistics_start = 100
+    device._response_event = asyncio.Event()
+
+    async def no_event(_value):
+        return None
+
+    device._event_trigger = no_event
+
+    original_handle_data = device._handle_data
+
+    async def capture_and_handle(sender, packet):
+        handled_packets.append(bytes(packet))
+        await original_handle_data(sender, packet)
+
+    device._handle_data = capture_and_handle
+
+    await device._process_raw_data(None, corrupted_packet)
+
+    assert handled_packets == []
+    assert not device._response_event.is_set()
+    assert not device.statistics
+    assert device._rx_buffer == bytearray()
+
+
 async def test_receive_buffer_recovers_from_restarted_frame():
     device = make_device()
     handled_packets = []
@@ -468,6 +504,7 @@ async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
     await test_receive_buffer_reassembles_fragmented_packet()
+    await test_receive_buffer_discards_invalid_crc_packet()
     await test_receive_buffer_recovers_from_restarted_frame()
     await test_notify_failure_disconnects_client()
     await test_connect_cancellation_disconnects_client()
