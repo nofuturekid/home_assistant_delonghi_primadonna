@@ -23,7 +23,8 @@ from homeassistant.core import HomeAssistant
 
 from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     BASE_COMMAND, BEVERAGE_NONE, BYTES_AUTOPOWEROFF_COMMAND,
-                    BYTES_LOAD_PROFILES, BYTES_POWER, BYTES_STATISTICS_COMMAND,
+                    BYTES_LOAD_PROFILES, BYTES_POWER, BYTES_POWER_OFF,
+                    BYTES_STATISTICS_COMMAND,
                     PARAM_SWITCHES, SWITCH_BIT_CUP_LIGHT,
                     SWITCH_BIT_ENERGY_SAVE, SWITCH_BIT_SOUNDS,
                     BYTES_LOAD_SWITCHES, BYTES_SWITCH_COMMAND,
@@ -676,6 +677,10 @@ class DelongiPrimadonna:
     async def power_on(self) -> None:
         """Turn the device on."""
         await self.send_command(BYTES_POWER)
+
+    async def power_off(self) -> None:
+        """Put the device into standby."""
+        await self.send_command(BYTES_POWER_OFF)
 
     async def cup_light_on(self) -> None:
         """Turn the cup light on."""

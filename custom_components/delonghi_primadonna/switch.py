@@ -27,6 +27,7 @@ async def async_setup_entry(
     model = get_machine_model(delongh_device.product_code)
 
     switches = [
+        DelongiPrimadonnaPowerSwitch(delongh_device, hass),
         DelongiPrimadonnaNotificationSwitch(delongh_device, hass),
         DelongiPrimadonnaPowerSaveSwitch(delongh_device, hass),
         DelongiPrimadonnaSoundsSwitch(delongh_device, hass),
@@ -46,6 +47,32 @@ async def async_setup_entry(
 
     async_add_entities(switches)
     return True
+
+
+class DelongiPrimadonnaPowerSwitch(
+    DelonghiDeviceEntity, ToggleEntity
+):
+    """Turn the machine on or put it into standby.
+
+    The state follows the machine status reported by the monitor
+    packets, so it also reflects use of the physical power button.
+    """
+
+    _attr_icon = 'mdi:power'
+    _attr_translation_key = 'power'
+
+    @property
+    def is_on(self) -> bool:
+        """Return True while the machine is not in standby."""
+        return self.device.switches.is_on
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the machine on."""
+        self.hass.async_create_task(self.device.power_on())
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Put the machine into standby."""
+        self.hass.async_create_task(self.device.power_off())
 
 
 class DelongiPrimadonnaCupLightSwitch(

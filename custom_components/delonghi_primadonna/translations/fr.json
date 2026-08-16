@@ -56,6 +56,9 @@
       },
       "time_sync": {
         "name": "Synchronisation de l'heure"
+      },
+      "power": {
+        "name": "Power"
       }
     },
     "binary_sensor": {

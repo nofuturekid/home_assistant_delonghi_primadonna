@@ -108,6 +108,10 @@ MACHINE_STATUS = {
 Command bytes
 """
 BYTES_POWER = [0x0d, 0x07, 0x84, 0x0f, 0x02, 0x01, 0x55, 0x12]
+# AppControl (0x84) with (1, 1) puts the machine into standby.
+# Not part of the officially observed app traffic; verified on a
+# PrimaDonna Elite ECAM 656.55.MS.
+BYTES_POWER_OFF = [0x0d, 0x07, 0x84, 0x0f, 0x01, 0x01, 0x00, 0x00]
 
 # Default bitmask for commands
 BASE_COMMAND = '10000001'
