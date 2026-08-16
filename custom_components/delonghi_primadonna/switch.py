@@ -64,7 +64,7 @@ class SettingsBackedSwitch:
     async def async_update(self) -> None:
         """Refresh the settings parameter from the device."""
         if self.device.connected:
-            await self.device.update_switches()
+            await self.device.update_settings()
 
 
 class DelongiPrimadonnaCupLightSwitch(

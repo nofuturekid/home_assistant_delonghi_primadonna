@@ -24,8 +24,8 @@ from homeassistant.core import HomeAssistant
 
 from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     BASE_COMMAND, BEVERAGE_NONE, BYTES_AUTOPOWEROFF_COMMAND,
-                    BYTES_LOAD_PROFILES, BYTES_LOAD_SWITCHES, BYTES_POWER,
-                    BYTES_POWER_OFF, BYTES_STATISTICS_COMMAND,
+                    BYTES_LOAD_PROFILES, BYTES_POWER, BYTES_POWER_OFF,
+                    BYTES_READ_PARAMETER, BYTES_STATISTICS_COMMAND,
                     BYTES_SWITCH_COMMAND, BYTES_TIME_COMMAND,
                     BYTES_WATER_HARDNESS_COMMAND,
                     BYTES_WATER_TEMPERATURE_COMMAND, COFFE_OFF, COFFE_ON,
@@ -38,9 +38,11 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     ESPRESSO2_OFF, ESPRESSO2_ON, ESPRESSO_OFF, ESPRESSO_ON,
                     HOTWATER_OFF, HOTWATER_ON, LONG_OFF, LONG_ON,
                     MACHINE_STATUS, NAME_CHARACTERISTIC, NOZZLE_STATE,
-                    PARAM_SWITCHES, START_COFFEE, STEAM_OFF, STEAM_ON,
-                    SWITCH_BIT_CUP_LIGHT, SWITCH_BIT_ENERGY_SAVE,
-                    SWITCH_BIT_SOUNDS, WATER_SHORTAGE, WATER_TANK_DETACHED)
+                    PARAM_AUTO_OFF, PARAM_SWITCHES, PARAM_WATER_HARDNESS,
+                    PARAM_WATER_TEMPERATURE, READABLE_PARAMETERS, START_COFFEE,
+                    STEAM_OFF, STEAM_ON, SWITCH_BIT_CUP_LIGHT,
+                    SWITCH_BIT_ENERGY_SAVE, SWITCH_BIT_SOUNDS, WATER_SHORTAGE,
+                    WATER_TANK_DETACHED)
 from .machine_switch import MachineSwitch, parse_switches
 from .model import get_machine_model
 
@@ -340,6 +342,10 @@ class DelongiPrimadonna:
         self._stats_lock = asyncio.Lock()
         self._switches_raw: int | None = None
         self._last_switches_request = 0.0
+        self._profiles_received = False
+        self.auto_off_level: int | None = None
+        self.water_hardness_level: int | None = None
+        self.water_temperature_level: int | None = None
         self._statistics_task: asyncio.Task | None = None
         self._initialization_task: asyncio.Task | None = None
         machine = get_machine_model(self.product_code)
@@ -573,22 +579,39 @@ class DelongiPrimadonna:
         if len(value) < 12:
             return
         param = (value[4] << 8) | value[5]
-        if param != PARAM_SWITCHES:
-            return
         raw = value[9]
-        self._switches_raw = raw
-        self.switches.cup_light = bool(raw & SWITCH_BIT_CUP_LIGHT)
-        self.switches.sounds = bool(raw & SWITCH_BIT_SOUNDS)
-        self.switches.energy_save = bool(raw & SWITCH_BIT_ENERGY_SAVE)
-        _LOGGER.debug('Settings parameter 0x3f = 0x%02x', raw)
+        if param == PARAM_SWITCHES:
+            self._switches_raw = raw
+            self.switches.cup_light = bool(raw & SWITCH_BIT_CUP_LIGHT)
+            self.switches.sounds = bool(raw & SWITCH_BIT_SOUNDS)
+            self.switches.energy_save = bool(raw & SWITCH_BIT_ENERGY_SAVE)
+        elif param == PARAM_AUTO_OFF:
+            self.auto_off_level = raw
+        elif param == PARAM_WATER_HARDNESS:
+            self.water_hardness_level = raw
+        elif param == PARAM_WATER_TEMPERATURE:
+            self.water_temperature_level = raw
+        else:
+            return
+        _LOGGER.debug('Parameter 0x%02x = 0x%02x', param, raw)
 
-    async def update_switches(self) -> None:
-        """Request the settings parameter with throttling."""
+    async def update_settings(self) -> None:
+        """Request the readable settings parameters with throttling.
+
+        Also picks up changes made directly on the machine's own menu
+        (auto power off, water hardness/temperature, switches).
+        """
         current_time = time.monotonic()
         if current_time - self._last_switches_request < 30:
             return
         self._last_switches_request = current_time
-        await self.send_command(BYTES_LOAD_SWITCHES.copy())
+        for param in READABLE_PARAMETERS:
+            message = BYTES_READ_PARAMETER.copy()
+            message[5] = param
+            await self.send_command(message)
+            await asyncio.sleep(0.3)
+        if not self._profiles_received:
+            await self._request_profile_names()
 
     async def _event_trigger(self, value):
         """
@@ -706,6 +729,7 @@ class DelongiPrimadonna:
                 _LOGGER.warning("Failed to parse profile response: %s", err)
             if parsed:
                 self._profiles.update(parsed)
+                self._profiles_received = True
             _LOGGER.debug(
                 "Available profiles: %s",
                 self._profiles
@@ -962,13 +986,26 @@ class DelongiPrimadonna:
                 raise
 
         if self.connected and not self._profiles_loaded:
-            command = BYTES_LOAD_PROFILES.copy()
-            command[5] = self._n_profiles
-            await self.send_command(command)
+            await self._request_profile_names()
             # Default to first profile until the user switches
             if self.active_profile_id is None:
                 self.active_profile_id = 1
             self._profiles_loaded = True
+
+    async def _request_profile_names(self) -> None:
+        """Request profile names in ranges of three.
+
+        A full six-profile response is ~130 bytes and frequently
+        fragments across BLE notifications, losing all names when a
+        fragment is dropped. Two short range reads (a4 f0 <start>
+        <end>) are far more reliable.
+        """
+        for start in range(1, self._n_profiles + 1, 3):
+            command = BYTES_LOAD_PROFILES.copy()
+            command[4] = start
+            command[5] = min(start + 2, self._n_profiles)
+            await self.send_command(command)
+            await asyncio.sleep(0.3)
 
     async def set_time(self, dt: datetime) -> None:
         """Set device clock from provided datetime."""
@@ -1000,18 +1037,21 @@ class DelongiPrimadonna:
         """Set auto power off time."""
         message = copy.deepcopy(BYTES_AUTOPOWEROFF_COMMAND)
         message[9] = power_off_interval
+        self.auto_off_level = power_off_interval
         await self.send_command(message)
 
     async def set_water_hardness(self, hardness_level) -> None:
         """Set water hardness"""
         message = copy.deepcopy(BYTES_WATER_HARDNESS_COMMAND)
         message[9] = hardness_level
+        self.water_hardness_level = hardness_level
         await self.send_command(message)
 
     async def set_water_temperature(self, temperature_level) -> None:
         """Set water temperature"""
         message = copy.deepcopy(BYTES_WATER_TEMPERATURE_COMMAND)
         message[9] = temperature_level
+        self.water_temperature_level = temperature_level
         await self.send_command(message)
 
     async def common_command(self, command: str) -> None:

@@ -70,6 +70,15 @@
       },
       "enabled": {
         "name": "Zapnuté"
+      },
+      "water_tank": {
+        "name": "Water tank"
+      },
+      "water_level_low": {
+        "name": "Water level low"
+      },
+      "grounds_container": {
+        "name": "Grounds container"
       }
     },
     "text": {
