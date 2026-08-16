@@ -56,6 +56,9 @@
       },
       "time_sync": {
         "name": "时间同步"
+      },
+      "power": {
+        "name": "Power"
       }
     },
     "binary_sensor": {
