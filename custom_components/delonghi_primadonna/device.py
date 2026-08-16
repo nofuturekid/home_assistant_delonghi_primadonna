@@ -320,6 +320,7 @@ class DelongiPrimadonna:
         self.is_dispensing = False
         self.dispensing_percentage = 0
         self._profiles_received = False
+        self._last_time_sync = 0.0
         self.auto_off_level: int | None = None
         self.water_hardness_level: int | None = None
         self.water_temperature_level: int | None = None
@@ -582,6 +583,11 @@ class DelongiPrimadonna:
             await asyncio.sleep(0.3)
         if not self._profiles_received:
             await self._request_profile_names()
+        if self.sync_time and (
+            current_time - self._last_time_sync > 24 * 3600
+        ):
+            self._last_time_sync = current_time
+            await self.set_time(datetime.now())
 
     async def _event_trigger(self, value):
         """
