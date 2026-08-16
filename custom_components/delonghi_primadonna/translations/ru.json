@@ -73,6 +73,15 @@
       },
       "dispensing": {
         "name": "Dispensing"
+      },
+      "water_tank": {
+        "name": "Water tank"
+      },
+      "water_level_low": {
+        "name": "Water level low"
+      },
+      "grounds_container": {
+        "name": "Grounds container"
       }
     },
     "text": {

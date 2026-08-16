@@ -129,6 +129,20 @@ class EnergySaveModeSelect(DelonghiDeviceEntity, SelectEntity, RestoreEntity):
         if (last_state := await self.async_get_last_state()) is not None:
             self._attr_current_option = last_state.state
 
+    @property
+    def current_option(self) -> str | None:
+        """Return the value read back from the machine, if known."""
+        level = self.device.auto_off_level
+        for option, value in POWER_OFF_OPTIONS.items():
+            if value == level:
+                return option
+        return self._attr_current_option
+
+    async def async_update(self) -> None:
+        """Refresh the settings parameters from the device."""
+        if self.device.connected:
+            self.hass.async_create_task(self.device.update_settings())
+
     async def async_select_option(self, option: str) -> None:
         """Select energy save mode action"""
         power_off_interval = POWER_OFF_OPTIONS.get(option)
@@ -155,6 +169,19 @@ class WaterHardnessSelect(DelonghiDeviceEntity, SelectEntity, RestoreEntity):
     def entity_category(self, **kwargs: Any) -> None:
         """Return the category of the entity."""
         return EntityCategory.CONFIG
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the value read back from the machine, if known."""
+        level = self.device.water_hardness_level
+        if level is not None and 0 <= level < len(self._attr_options):
+            return self._attr_options[level]
+        return self._attr_current_option
+
+    async def async_update(self) -> None:
+        """Refresh the settings parameters from the device."""
+        if self.device.connected:
+            self.hass.async_create_task(self.device.update_settings())
 
     async def async_select_option(self, option: str) -> None:
         """Select water hardness action"""
@@ -185,6 +212,19 @@ class WaterTemperatureSelect(
     def entity_category(self, **kwargs: Any) -> None:
         """Return the category of the entity."""
         return EntityCategory.CONFIG
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the value read back from the machine, if known."""
+        level = self.device.water_temperature_level
+        if level is not None and 0 <= level < len(self._attr_options):
+            return self._attr_options[level]
+        return self._attr_current_option
+
+    async def async_update(self) -> None:
+        """Refresh the settings parameters from the device."""
+        if self.device.connected:
+            self.hass.async_create_task(self.device.update_settings())
 
     async def async_select_option(self, option: str) -> None:
         """Select water temperature action"""

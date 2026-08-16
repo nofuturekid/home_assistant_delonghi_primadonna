@@ -11,6 +11,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .base_entity import DelonghiDeviceEntity
 from .const import DOMAIN
 from .device import DelongiPrimadonna
+from .machine_switch import MachineSwitch
 
 
 async def async_setup_entry(
@@ -27,6 +28,9 @@ async def async_setup_entry(
             DelongiPrimadonnaFilterSensor(delongh_device, hass),
             DelongiPrimadonnaEnabledSensor(delongh_device, hass),
             DelongiPrimadonnaDispensingSensor(delongh_device, hass),
+            DelongiPrimadonnaWaterTankSensor(delongh_device, hass),
+            DelongiPrimadonnaWaterLevelLowSensor(delongh_device, hass),
+            DelongiPrimadonnaGroundsContainerSensor(delongh_device, hass),
         ]
     )
     return True
@@ -65,6 +69,58 @@ class DelongiPrimadonnaEnabledSensor(
     @property
     def is_on(self) -> bool:
         return self.device.switches.is_on
+
+
+class DelongiPrimadonnaWaterTankSensor(
+    DelonghiDeviceEntity, BinarySensorEntity
+):
+    """Problem when the water tank is missing or empty."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = 'water_tank'
+    _attr_icon = 'mdi:cup-water'
+
+    @property
+    def is_on(self) -> bool:
+        """True when the tank is absent or the empty-tank alarm is set."""
+        return (
+            MachineSwitch.WATER_TANK_ABSENT in self.device.active_switches
+            or bool(self.device.service & 0x01)
+        )
+
+
+class DelongiPrimadonnaWaterLevelLowSensor(
+    DelonghiDeviceEntity, BinarySensorEntity
+):
+    """Problem when the water level is low."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = 'water_level_low'
+    _attr_icon = 'mdi:water-alert'
+
+    @property
+    def is_on(self) -> bool:
+        """True while the machine reports a low water level."""
+        return MachineSwitch.WATER_LEVEL_LOW in self.device.active_switches
+
+
+class DelongiPrimadonnaGroundsContainerSensor(
+    DelonghiDeviceEntity, BinarySensorEntity
+):
+    """Problem when the grounds container is missing or full."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = 'grounds_container'
+    _attr_icon = 'mdi:coffee-maker-check'
+
+    @property
+    def is_on(self) -> bool:
+        """True when the container is out or the full alarm is set."""
+        return (
+            MachineSwitch.COFFEE_WASTE_CONTAINER
+            in self.device.active_switches
+            or bool(self.device.service & 0x02)
+        )
 
 
 class DelongiPrimadonnaDispensingSensor(

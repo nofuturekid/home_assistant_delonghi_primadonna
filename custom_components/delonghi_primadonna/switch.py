@@ -101,7 +101,7 @@ class DelongiPrimadonnaCupLightSwitch(
     async def async_update(self) -> None:
         """Refresh the settings parameter from the device."""
         if self.device.connected:
-            self.hass.async_create_task(self.device.update_switches())
+            self.hass.async_create_task(self.device.update_settings())
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the device on."""
@@ -174,7 +174,7 @@ class DelongiPrimadonnaPowerSaveSwitch(
     async def async_update(self) -> None:
         """Refresh the settings parameter from the device."""
         if self.device.connected:
-            self.hass.async_create_task(self.device.update_switches())
+            self.hass.async_create_task(self.device.update_settings())
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the energy save on"""
@@ -212,7 +212,7 @@ class DelongiPrimadonnaSoundsSwitch(
     async def async_update(self) -> None:
         """Refresh the settings parameter from the device."""
         if self.device.connected:
-            self.hass.async_create_task(self.device.update_switches())
+            self.hass.async_create_task(self.device.update_settings())
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the sounds on."""

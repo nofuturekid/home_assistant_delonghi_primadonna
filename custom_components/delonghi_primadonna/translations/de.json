@@ -73,6 +73,15 @@
       },
       "dispensing": {
         "name": "Bezug läuft"
+      },
+      "water_tank": {
+        "name": "Wassertank"
+      },
+      "water_level_low": {
+        "name": "Wasserstand niedrig"
+      },
+      "grounds_container": {
+        "name": "Satzbehälter"
       }
     },
     "text": {

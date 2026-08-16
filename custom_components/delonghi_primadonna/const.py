@@ -141,11 +141,22 @@ BYTES_WATER_TEMPERATURE_COMMAND = [
     0x00, 0x00, 0x00, 0x00, 0x6f, 0x31
 ]
 
-# Reads a device parameter (0x95). Parameter 0x3f holds the settings
-# bitmask written by BYTES_SWITCH_COMMAND (see SWITCH_BIT_* below).
+# Reads a device parameter (0x95). Byte 5 selects the parameter.
+# 0x3f holds the settings bitmask written by BYTES_SWITCH_COMMAND
+# (see SWITCH_BIT_* below); the others mirror the corresponding
+# 0x90 write commands.
 PARAM_SWITCHES = 0x3F
-BYTES_LOAD_SWITCHES = [
-    0x0d, 0x08, 0x95, 0x0f, 0x00, 0x3f,
+PARAM_AUTO_OFF = 0x3E
+PARAM_WATER_HARDNESS = 0x32
+PARAM_WATER_TEMPERATURE = 0x3D
+READABLE_PARAMETERS = (
+    PARAM_SWITCHES,
+    PARAM_AUTO_OFF,
+    PARAM_WATER_HARDNESS,
+    PARAM_WATER_TEMPERATURE,
+)
+BYTES_READ_PARAMETER = [
+    0x0d, 0x08, 0x95, 0x0f, 0x00, 0x00,
     0x01, 0x00, 0x00
 ]
 
