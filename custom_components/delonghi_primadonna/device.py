@@ -659,16 +659,33 @@ class DelongiPrimadonna:
         NAME_SIZE = 20
         NAME_OFFSET = 1
         NAME_HEADER = 4
+        # Characters that can appear in a profile name; anything else marks
+        # the end of the profile area (the packet continues with unrelated
+        # monitor/statistics data and must not be parsed as names).
+        allowed = set(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz"
+            "0123456789 ._/-&+'"
+            "\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df"
+        )
         profile_index = 1
         idx = NAME_HEADER
         while idx + NAME_SIZE < len(b):
-            profiles.setdefault(
-                profile_index,
-                b[idx:idx + NAME_SIZE]
-                .decode("utf-16-be")
+            raw = b[idx:idx + NAME_SIZE]
+            name = (
+                raw.decode("utf-16-be", errors="ignore")
                 .rstrip("\x00")
-                .strip(),
+                .strip()
             )
+            cleaned = ""
+            for char in name:
+                if char not in allowed:
+                    break
+                cleaned += char
+            cleaned = cleaned.strip()
+            if not cleaned:
+                break
+            profiles.setdefault(profile_index, cleaned)
             profile_index += 1
             idx += NAME_SIZE + NAME_OFFSET
         return profiles
