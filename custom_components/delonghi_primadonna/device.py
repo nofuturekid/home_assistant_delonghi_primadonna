@@ -343,6 +343,7 @@ class DelongiPrimadonna:
         self._switches_raw: int | None = None
         self._last_switches_request = 0.0
         self._profiles_received = False
+        self._profile_request_start = 1
         self.auto_off_level: int | None = None
         self.water_hardness_level: int | None = None
         self.water_temperature_level: int | None = None
@@ -841,8 +842,11 @@ class DelongiPrimadonna:
         NAME_SIZE = 20
         NAME_OFFSET = 1
         NAME_HEADER = 4
+        # Names are numbered from the start index of the last range
+        # request (responses carry no index themselves).
+        first_profile = self._profile_request_start
         idx = NAME_HEADER
-        for profile_index in range(1, self._n_profiles + 1):
+        for profile_index in range(first_profile, self._n_profiles + 1):
             if idx + NAME_SIZE > len(b):
                 break
             raw = b[idx:idx + NAME_SIZE]
@@ -1004,6 +1008,9 @@ class DelongiPrimadonna:
             command = BYTES_LOAD_PROFILES.copy()
             command[4] = start
             command[5] = min(start + 2, self._n_profiles)
+            # The response carries no start index; send_command waits
+            # for the response, so remembering it here is safe.
+            self._profile_request_start = start
             await self.send_command(command)
             await asyncio.sleep(0.3)
 
