@@ -15,8 +15,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
 
-from bleak import BleakClient
 from bleak.exc import BleakDBusError, BleakError
+from bleak_retry_connector import (BleakClientWithServiceCache,
+                                   establish_connection)
 from homeassistant.components import bluetooth
 from homeassistant.const import CONF_MAC, CONF_MODEL, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -307,6 +308,7 @@ class DelongiPrimadonna:
         self._lock = asyncio.Lock()
         self._rx_buffer = bytearray()
         self._response_event = None
+        self._expected_statistics_start: int | None = None
         self._last_response: bytes | None = None
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
@@ -315,6 +317,8 @@ class DelongiPrimadonna:
         self._last_switches_request = 0.0
         self.is_dispensing = False
         self.dispensing_percentage = 0
+        self._statistics_task: asyncio.Task | None = None
+        self._initialization_task: asyncio.Task | None = None
         machine = get_machine_model(self.product_code)
         self.model = (
             machine.name if machine and machine.name else 'Prima Donna'
@@ -363,6 +367,61 @@ class DelongiPrimadonna:
             # Fallback to legacy enum if no recipes
             self.available_beverages = [*AvailableBeverage]
 
+    def set_initialization_task(self, task: asyncio.Task) -> None:
+        """Track the device initialization task."""
+        self._initialization_task = task
+
+    async def cancel_initialization(self) -> None:
+        """Cancel and wait for device initialization."""
+        task = self._initialization_task
+        self._initialization_task = None
+
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    def schedule_statistics_update(self) -> None:
+        """Schedule a statistics update when needed."""
+        task = self._statistics_task
+        if task is not None and not task.done():
+            return
+
+        if time.monotonic() - self._last_stats_request < 60:
+            return
+
+        self._statistics_task = self._hass.async_create_background_task(
+            self._run_statistics_update(),
+            "delonghi statistics update",
+        )
+
+    async def _run_statistics_update(self) -> None:
+        """Run a managed statistics update."""
+        try:
+            await self.update_statistics()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _LOGGER.exception("Statistics update failed")
+
+    async def cancel_statistics_update(self) -> None:
+        """Cancel and wait for a pending statistics update."""
+        task = self._statistics_task
+        self._statistics_task = None
+
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
     async def disconnect(self):
         """Disconnect from the device."""
         _LOGGER.info("Disconnect from %s", self.mac)
@@ -387,66 +446,69 @@ class DelongiPrimadonna:
                 self._client = None
                 self.connected = False
 
-    async def _connect(self, retries=3):
+    async def _connect(self):
         """Connect to the device."""
+        if self._client is not None and self._client.is_connected:
+            return
+
+        self._client = None
+        self.connected = False
         self._connecting = True
-        last_error = None
-        for attempt in range(retries):
-            try:
-                if self._client is None or not self._client.is_connected:
-                    self._device = bluetooth.async_ble_device_from_address(
-                        self._hass, self.mac, connectable=True
-                    )
-                    if not self._device:
-                        raise BleakError(
-                            (
-                                f"A device with address {self.mac}"
-                                " could not be found."
-                            )
-                        )
-                    self._client = BleakClient(self._device)
-                    _LOGGER.info(
-                        "Connect to %s (attempt %d)",
-                        self.mac,
-                        attempt + 1,
-                    )
-                    await asyncio.wait_for(
-                        self._client.connect(),
-                        timeout=10,
-                    )
-                    # Service discovery is performed during the connection
-                    # process. Accessing ``get_services`` directly raises a
-                    # ``FutureWarning`` in recent versions of Bleak.
-                    # ``self._client.services`` will contain the discovered
-                    # services once the connection succeeds.
-                    await asyncio.wait_for(
-                        self._client.start_notify(
-                            uuid.UUID(CONTROLL_CHARACTERISTIC),
-                            self._process_raw_data,
-                        ),
-                        timeout=10,
-                    )
-                self._connecting = False
-                return
-            except Exception as error:
-                _LOGGER.warning(
-                    "BLE connect error: %s (type: %s, attempt %d)",
-                    error,
-                    type(error).__name__,
-                    attempt + 1,
+        try:
+            self._device = bluetooth.async_ble_device_from_address(
+                self._hass, self.mac, connectable=True
+            )
+            if not self._device:
+                raise BleakError(
+                    f"A device with address {self.mac} could not be found."
                 )
-                if self._client is not None:
-                    try:
-                        await asyncio.wait_for(
-                            self._client.disconnect(), timeout=5
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                self._client = None
-                last_error = error
-                await asyncio.sleep(2)
-        self._connecting = False
-        raise last_error
+
+            _LOGGER.info("Connect to %s", self.mac)
+            client = await establish_connection(
+                BleakClientWithServiceCache,
+                self._device,
+                self.name or self.mac,
+                max_attempts=3,
+            )
+            self._client = client
+
+            try:
+                self._rx_buffer.clear()
+                await asyncio.wait_for(
+                    client.start_notify(
+                        uuid.UUID(CONTROLL_CHARACTERISTIC),
+                        self._process_raw_data,
+                    ),
+                    timeout=10,
+                )
+                self.connected = True
+            except asyncio.CancelledError:
+                try:
+                    await asyncio.wait_for(client.disconnect(), timeout=5)
+                except Exception:  # noqa: BLE001
+                    pass
+                finally:
+                    self._client = None
+                raise
+            except Exception:
+                try:
+                    await asyncio.wait_for(client.disconnect(), timeout=5)
+                except Exception:  # noqa: BLE001
+                    pass
+                finally:
+                    self._client = None
+                raise
+
+        except Exception as error:
+            self.connected = False
+            _LOGGER.warning(
+                "BLE connect error: %s (type: %s)",
+                error,
+                type(error).__name__,
+            )
+            raise
+        finally:
+            self._connecting = False
 
     def _make_switch_command(self):
         """Make hex command.
@@ -538,6 +600,16 @@ class DelongiPrimadonna:
             )
         _LOGGER.info('Event triggered: %s', event_data)
 
+    @staticmethod
+    def _has_valid_crc(packet: bytes) -> bool:
+        """Return whether an assembled BLE packet has a valid CRC."""
+        if len(packet) < 4:
+            return False
+
+        expected_crc = int.from_bytes(packet[-2:], byteorder='big')
+        actual_crc = crc_hqx(packet[:-2], 0x1D0F)
+        return actual_crc == expected_crc
+
     async def _process_raw_data(self, sender, value):
         """Assemble incoming BLE packets and pass complete messages."""
         self._rx_buffer.extend(value)
@@ -563,17 +635,32 @@ class DelongiPrimadonna:
                 return
 
             packet = bytes(self._rx_buffer[:msg_len])
+
+            if not self._has_valid_crc(packet):
+                _LOGGER.debug(
+                    "Discarding invalid BLE frame candidate: %s",
+                    hexlify(packet, " "),
+                )
+                del self._rx_buffer[0]
+                continue
+
             del self._rx_buffer[:msg_len]
             await self._handle_data(sender, packet)
 
     async def _handle_data(self, sender, value):
         """Handle notifications from the device."""
-        if (
-            self._response_event is not None
-            and not self._response_event.is_set()
-        ):
-            self._response_event.set()
         answer_id = value[2] if len(value) > 2 else None
+        expected_statistics_start = self._expected_statistics_start
+        response_start = (
+            ((value[4] << 8) | value[5])
+            if answer_id == 0xA2 and len(value) >= 12
+            else None
+        )
+        statistics_response_matches = (
+            expected_statistics_start is not None
+            and response_start is not None
+            and response_start >= expected_statistics_start
+        )
 
         if answer_id in [0x75, 0x70]:
             monitor_data = parse_monitor_data(value)
@@ -606,9 +693,29 @@ class DelongiPrimadonna:
             if profile_id is not None and status == 0:
                 self.active_profile_id = profile_id
         elif answer_id == 0xA2:
-            await self._parse_statistics(value)
+            if statistics_response_matches:
+                await self._parse_statistics(value)
+            else:
+                _LOGGER.debug(
+                    "Ignoring unexpected statistics response: "
+                    "expected start >= %s, got %s",
+                    expected_statistics_start,
+                    response_start,
+                )
         elif answer_id == 0x95:
             self._handle_parameter_data(value)
+
+        if (
+            self._response_event is not None
+            and not self._response_event.is_set()
+        ):
+            response_matches = (
+                statistics_response_matches
+                if expected_statistics_start is not None
+                else answer_id != 0xA2
+            )
+            if response_matches:
+                self._response_event.set()
 
         hex_value = hexlify(value, ' ')
 
@@ -821,9 +928,9 @@ class DelongiPrimadonna:
             except asyncio.exceptions.TimeoutError as error:
                 self.connected = False
                 _LOGGER.info('TimeoutError: %s at device connection', error)
-            except asyncio.exceptions.CancelledError as error:
+            except asyncio.CancelledError:
                 self.connected = False
-                _LOGGER.warning('CancelledError: %s', error)
+                raise
 
         if self.connected and not self._profiles_loaded:
             command = BYTES_LOAD_PROFILES.copy()
@@ -870,7 +977,7 @@ class DelongiPrimadonna:
         message = [int(x, 16) for x in command.split(' ')]
         await self.send_command(message)
 
-    async def send_command(self, message, retries=3):
+    async def send_command(self, message, retries=3) -> bool:
         async with self._lock:
             message_to_send = copy.deepcopy(message)
             for attempt in range(retries):
@@ -884,33 +991,60 @@ class DelongiPrimadonna:
                         'Send command: %s',
                         hexlify(bytearray(message_to_send), " ")
                     )
+
                     self._response_event = asyncio.Event()
-                    await self._client.write_gatt_char(
-                        CONTROLL_CHARACTERISTIC, bytearray(message_to_send)
-                    )
+                    if (
+                        len(message_to_send) > 5
+                        and message_to_send[2] == 0xA2
+                    ):
+                        self._expected_statistics_start = (
+                            message_to_send[4] << 8
+                        ) | message_to_send[5]
+                    else:
+                        self._expected_statistics_start = None
+
+                    response_received = False
                     try:
-                        await asyncio.wait_for(
-                            self._response_event.wait(),
-                            timeout=10,
+                        await self._client.write_gatt_char(
+                            CONTROLL_CHARACTERISTIC,
+                            bytearray(message_to_send),
                         )
-                    except asyncio.TimeoutError:
-                        _LOGGER.warning(
-                            'Timeout waiting for response to command: %s',
-                            hexlify(bytearray(message_to_send), " ")
-                        )
+                        try:
+                            await asyncio.wait_for(
+                                self._response_event.wait(),
+                                timeout=10,
+                            )
+                            response_received = True
+                        except asyncio.TimeoutError:
+                            _LOGGER.warning(
+                                'Timeout waiting for response to command: %s',
+                                hexlify(bytearray(message_to_send), " ")
+                            )
                     finally:
                         self._response_event = None
-                    return
+                        self._expected_statistics_start = None
+
+                    return response_received
                 except BleakError as error:
                     self.connected = False
-                    self._client = None
                     _LOGGER.warning(
                         'BleakError: %s (attempt %d)',
                         error,
                         attempt + 1
                     )
+                    if self._client is not None:
+                        try:
+                            await asyncio.wait_for(
+                                self._client.disconnect(),
+                                timeout=5,
+                            )
+                        except Exception:  # noqa: BLE001
+                            pass
+                    self._client = None
                     await asyncio.sleep(2)
+
             _LOGGER.error('Failed to send command after %d attempts', retries)
+            return False
 
     async def _parse_statistics(self, data: bytes) -> None:
         """Parse statistics response"""
@@ -969,38 +1103,44 @@ class DelongiPrimadonna:
 
         async with self._stats_lock:
             current_time = time.monotonic()
-            # Update at most once every 60 seconds
+            # Attempt statistics polling at most once every 60 seconds,
+            # including failed attempts, to avoid repeated BLE retries.
             if current_time - self._last_stats_request < 60:
                 return
 
             self._last_stats_request = current_time
-            # Maintenance counters (100-109)
-            await self.get_statistics(100, 10)
+            # Start sparse statistics sequence at parameter 100
+            if not await self.get_statistics(100, 10):
+                return
             await asyncio.sleep(0.3)
 
-            # Extended maintenance (110-119)
-            await self.get_statistics(110, 10)
+            # Continue sparse statistics from parameter 111
+            if not await self.get_statistics(111, 10):
+                return
             await asyncio.sleep(0.3)
 
             # Coffee beverage totals (3000-3009)
-            await self.get_statistics(3000, 10)
-            await asyncio.sleep(0.3)
-
-            # Request additional coffee totals range
-            # Covers: 3077-3080 (3077 is combined with 3000 for total coffee)
-            await self.get_statistics(3077, 4)
+            if not await self.get_statistics(3000, 10):
+                return
             await asyncio.sleep(0.3)
 
             # Request cold milk, choco and tea statistics
             # Covers: 3017-3026 (3017=cold milk, 3021=choco, 3025=tea)
-            await self.get_statistics(3017, 10)
+            if not await self.get_statistics(3017, 10):
+                return
             await asyncio.sleep(0.3)
 
-    async def get_statistics(self, start_index: int, count: int) -> None:
+            # Request optional additional coffee totals range
+            # Covers: 3077-3080 (3077 is combined with 3000 for total coffee)
+            if not await self.get_statistics(3077, 4):
+                return
+            await asyncio.sleep(0.3)
+
+    async def get_statistics(self, start_index: int, count: int) -> bool:
         """Get statistics from the machine"""
         message = copy.deepcopy(BYTES_STATISTICS_COMMAND)
         message[4] = (start_index >> 8) & 0xFF
         message[5] = start_index & 0xFF
         message[6] = count
 
-        await self.send_command(message)
+        return await self.send_command(message)
