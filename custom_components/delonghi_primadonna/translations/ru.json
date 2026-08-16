@@ -70,6 +70,9 @@
       },
       "enabled": {
         "name": "Включено"
+      },
+      "dispensing": {
+        "name": "Dispensing"
       }
     },
     "text": {

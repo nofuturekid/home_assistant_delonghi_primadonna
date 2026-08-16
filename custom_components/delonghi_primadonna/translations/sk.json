@@ -70,6 +70,9 @@
       },
       "enabled": {
         "name": "Zapnuté"
+      },
+      "dispensing": {
+        "name": "Dispensing"
       }
     },
     "text": {

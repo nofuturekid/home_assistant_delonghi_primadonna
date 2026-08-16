@@ -70,6 +70,9 @@
       },
       "enabled": {
         "name": "已启用"
+      },
+      "dispensing": {
+        "name": "Dispensing"
       }
     },
     "text": {

@@ -70,6 +70,9 @@
       },
       "enabled": {
         "name": "Enabled"
+      },
+      "dispensing": {
+        "name": "Dispensing"
       }
     },
     "text": {
