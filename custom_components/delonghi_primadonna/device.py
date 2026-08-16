@@ -320,6 +320,7 @@ class DelongiPrimadonna:
         self.is_dispensing = False
         self.dispensing_percentage = 0
         self._profiles_received = False
+        self._profile_request_start = 1
         self._last_time_sync = 0.0
         self.auto_off_level: int | None = None
         self.water_hardness_level: int | None = None
@@ -820,6 +821,9 @@ class DelongiPrimadonna:
         NAME_SIZE = 20
         NAME_OFFSET = 1
         NAME_HEADER = 4
+        # Names are numbered from the start index of the last range
+        # request (responses carry no index themselves).
+        first_profile = self._profile_request_start
         # Characters that can appear in a profile name; anything else marks
         # the end of the profile area (the packet continues with unrelated
         # monitor/statistics data and must not be parsed as names).
@@ -829,7 +833,7 @@ class DelongiPrimadonna:
             "0123456789 ._/-&+'"
             "\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df"
         )
-        profile_index = 1
+        profile_index = first_profile
         idx = NAME_HEADER
         while idx + NAME_SIZE < len(b):
             raw = b[idx:idx + NAME_SIZE]
@@ -982,6 +986,9 @@ class DelongiPrimadonna:
             command = BYTES_LOAD_PROFILES.copy()
             command[4] = start
             command[5] = min(start + 2, self._n_profiles)
+            # The response carries no start index; send_command waits
+            # for the response, so remembering it here is safe.
+            self._profile_request_start = start
             await self.send_command(command)
             await asyncio.sleep(0.3)
 
