@@ -95,7 +95,11 @@ DEVICE_STATUS = {
 MACHINE_STATUS = {
     0: "turned_off",
     1: "heating",
-    2: "washing",
+    # Measured 2026-08-20: status 2 appears immediately after the
+    # power-off command, matching longshot's ShuttingDown. Values 4, 5, 6
+    # and 14 are still unverified and disagree with longshot (Descaling,
+    # SteamPreparation, Recovery, and 16 = ChocolatePreparation).
+    2: "shutting_down",
     3: "heating",
     4: "heating",
     5: "ready",  # Old / v1 Ready

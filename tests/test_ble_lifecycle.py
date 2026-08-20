@@ -860,6 +860,62 @@ async def test_raw_command_parsing():
             raise AssertionError(f"{rubbish!r} should be rejected")
 
 
+def _monitor_frame(status: int, sub_status: int = 0x00) -> bytes:
+    """A 0x75 frame with no alarms, so the state is what surfaces."""
+    return bytes([
+        0xD0, 0x12, 0x75, 0x0F,
+        0x00,              # nozzle
+        0x00, 0x00,        # switches
+        0x00, 0x00,        # alarms, low
+        status,
+        sub_status,
+        0x00,              # percentage
+        0x00, 0x00,        # alarms, high
+        0x00, 0x00, 0x00,  # unused
+        0x00, 0x00,        # checksum, not verified here
+    ])
+
+
+async def test_shutting_down_is_not_washing():
+    """Measured: status 2 appears right after the power-off command.
+
+    19:31:23 status 07 (ready) - power off sent 19:31:30 - 19:31:35
+    status 02. longshot names 2 ShuttingDown; the table said "washing".
+    """
+    device = make_device()
+    frame = _monitor_frame(0x02, 0x01)
+
+    device._handle_monitor_data(
+        device_module.parse_monitor_data(frame), 0x75, frame
+    )
+
+    assert device.status == 'shutting_down'
+
+
+async def test_standby_is_not_reported_as_ready():
+    """Status 0 is a machine that is off, and was reported as Ready."""
+    device = make_device()
+    frame = _monitor_frame(0x00)
+
+    device._handle_monitor_data(
+        device_module.parse_monitor_data(frame), 0x75, frame
+    )
+
+    assert device.status == 'turned_off'
+
+
+async def test_turning_on_is_not_reported_as_ready():
+    """Measured: status 1 runs the whole warm-up, percentage climbing."""
+    device = make_device()
+    frame = _monitor_frame(0x01, 0x05)
+
+    device._handle_monitor_data(
+        device_module.parse_monitor_data(frame), 0x75, frame
+    )
+
+    assert device.status == 'heating'
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -887,6 +943,9 @@ async def run_tests():
     await test_power_on_retries_profile_names_immediately()
     await test_power_on_leaves_backoff_alone_once_names_are_known()
     await test_raw_command_parsing()
+    await test_shutting_down_is_not_washing()
+    await test_standby_is_not_reported_as_ready()
+    await test_turning_on_is_not_reported_as_ready()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "
