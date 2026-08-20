@@ -860,13 +860,15 @@ async def test_raw_command_parsing():
             raise AssertionError(f"{rubbish!r} should be rejected")
 
 
-def _monitor_frame(status: int, sub_status: int = 0x00) -> bytes:
-    """A 0x75 frame with no alarms, so the state is what surfaces."""
+def _monitor_frame(
+    status: int, sub_status: int = 0x00, alarms: int = 0x00
+) -> bytes:
+    """A 0x75 frame; without alarms the machine state is what surfaces."""
     return bytes([
         0xD0, 0x12, 0x75, 0x0F,
         0x00,              # nozzle
         0x00, 0x00,        # switches
-        0x00, 0x00,        # alarms, low
+        alarms, 0x00,      # alarms, low
         status,
         sub_status,
         0x00,              # percentage
@@ -916,6 +918,31 @@ async def test_turning_on_is_not_reported_as_ready():
     assert device.status == 'heating'
 
 
+async def test_alarm_names_are_translation_keys():
+    """The status must be a key, or twelve translations never show.
+
+    strings.json and translations/*.json define descale_alarm and 28
+    others, but the code set human text like "Descaling needed", which
+    matches no key - so Home Assistant fell back to the raw string and
+    every translation was dead code.
+    """
+    device = make_device()
+    frame = _monitor_frame(0x07, alarms=0x04)   # bit 2, descaling
+
+    device._handle_monitor_data(
+        device_module.parse_monitor_data(frame), 0x75, frame
+    )
+
+    assert device.status == 'descale_alarm'
+
+
+async def test_status_starts_unknown():
+    """Before a single frame arrives nothing is known about the machine."""
+    device = make_device()
+
+    assert device.status is None
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -946,6 +973,8 @@ async def run_tests():
     await test_shutting_down_is_not_washing()
     await test_standby_is_not_reported_as_ready()
     await test_turning_on_is_not_reported_as_ready()
+    await test_alarm_names_are_translation_keys()
+    await test_status_starts_unknown()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "

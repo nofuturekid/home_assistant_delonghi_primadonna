@@ -347,7 +347,8 @@ class DelongiPrimadonna:
         self.notify = False
         self.steam_nozzle = NOZZLE_STATE[-1]
         self.service = 0
-        self.status = "Ready"
+        # Nothing is known until the first frame arrives.
+        self.status: str | None = None
         self.switches = DeviceSwitches()
         self.active_switches: list[MachineSwitch] = []
         self.sync_time = False
