@@ -375,7 +375,6 @@ class DelongiPrimadonna:
         }
         self.active_profile_id: int | None = None
         self.profiles = list(self._profiles.values())
-        self._profiles_loaded = False
 
         # Build dynamic beverage list from machine recipes
         # name -> {id, coffee_qty, milk_qty}
@@ -1021,12 +1020,11 @@ class DelongiPrimadonna:
                 self.connected = False
                 raise
 
-        if self.connected and not self._profiles_loaded:
-            await self._request_profile_names()
-            # Default to first profile until the user switches
-            if self.active_profile_id is None:
-                self.active_profile_id = 1
-            self._profiles_loaded = True
+        if self.connected and self.active_profile_id is None:
+            # Default to first profile until the user switches. Loading
+            # the names themselves is update_settings' job, which owns
+            # the retry policy for it.
+            self.active_profile_id = 1
 
     async def _request_profile_names(self) -> None:
         """Request profile names in ranges of three.
