@@ -37,21 +37,19 @@ async def async_setup_entry(
 
 
 class DelongiPrimadonnaEnabledSensor(
-    DelonghiDeviceEntity, BinarySensorEntity, RestoreEntity
+    DelonghiDeviceEntity, BinarySensorEntity
 ):
-    """
-    Shows if the device up and running
+    """Shows whether the machine is out of standby.
+
+    Deliberately not a RestoreEntity: is_on reads the machine state, so
+    there is nothing of its own to restore, and writing a remembered
+    value back into the device made it claim a state no frame had
+    reported yet.
     """
 
     _attr_device_class = BinarySensorDeviceClass.RUNNING
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = 'enabled'
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        if (last_state := await self.async_get_last_state()) is not None:
-            self._attr_is_on = last_state.state == 'on'
-            self.device.switches.is_on = self._attr_is_on
 
     @property
     def icon(self) -> str:
