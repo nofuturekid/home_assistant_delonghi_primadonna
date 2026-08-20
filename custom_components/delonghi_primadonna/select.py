@@ -46,7 +46,9 @@ class ProfileSelect(DelonghiDeviceEntity, SelectEntity, RestoreEntity):
 
     def __init__(self, delongh_device: DelongiPrimadonna, hass: HomeAssistant):
         super().__init__(delongh_device, hass)
-        self._attr_current_option = delongh_device.profiles[0]
+        # The machine never reports its active profile, so start unknown
+        # rather than claiming the first one.
+        self._attr_current_option = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
