@@ -1,15 +1,24 @@
 # Home assistant Delonghi integration
 
+> **This is a maintained fork** of
+> [Arbuzov/home_assistant_delonghi_primadonna](https://github.com/Arbuzov/home_assistant_delonghi_primadonna)
+> — all credit for the original integration goes there.
+>
+> This copy adds settings readback, alert sensors and profile-name
+> handling, and is the version installed from
+> [nofuturekid/home_assistant_delonghi_primadonna](https://github.com/nofuturekid/home_assistant_delonghi_primadonna).
+> **Report problems with this version here, not upstream.**
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![License](https://img.shields.io/github/license/Arbuzov/home_assistant_delonghi_primadonna?style=for-the-badge)](https://github.com/Arbuzov/home_assistant_delonghi_primadonna/blob/master/LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/Arbuzov/home_assistant_delonghi_primadonna?style=for-the-badge)](https://github.com/Arbuzov/home_assistant_delonghi_primadonna/releases)
+[![License](https://img.shields.io/github/license/nofuturekid/home_assistant_delonghi_primadonna?style=for-the-badge)](https://github.com/nofuturekid/home_assistant_delonghi_primadonna/blob/maintained/LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/nofuturekid/home_assistant_delonghi_primadonna?style=for-the-badge)](https://github.com/nofuturekid/home_assistant_delonghi_primadonna/releases)
 [![Latest Release](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.delonghi_primadonna.total)](https://analytics.home-assistant.io/custom_integrations.json)
-[![Validate Workflow](https://img.shields.io/github/actions/workflow/status/Arbuzov/home_assistant_delonghi_primadonna/validate.yml?branch=master&style=flat)](https://github.com/Arbuzov/home_assistant_delonghi_primadonna/actions/workflows/validate.yml)
-[![GitHub Stars](https://img.shields.io/github/stars/Arbuzov/home_assistant_delonghi_primadonna?style=flat)](https://github.com/Arbuzov/home_assistant_delonghi_primadonna/stargazers)
-[![GitHub Last Commit](https://img.shields.io/github/last-commit/Arbuzov/home_assistant_delonghi_primadonna?style=flat)](https://github.com/Arbuzov/home_assistant_delonghi_primadonna/commits/master)
+[![Validate Workflow](https://img.shields.io/github/actions/workflow/status/nofuturekid/home_assistant_delonghi_primadonna/validate.yml?branch=maintained&style=flat)](https://github.com/nofuturekid/home_assistant_delonghi_primadonna/actions/workflows/validate.yml)
+[![GitHub Stars](https://img.shields.io/github/stars/nofuturekid/home_assistant_delonghi_primadonna?style=flat)](https://github.com/nofuturekid/home_assistant_delonghi_primadonna/stargazers)
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/nofuturekid/home_assistant_delonghi_primadonna?style=flat)](https://github.com/nofuturekid/home_assistant_delonghi_primadonna/commits/maintained)
 
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Arbuzov&repository=home_assistant_delonghi_primadonna&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=nofuturekid&repository=home_assistant_delonghi_primadonna&category=integration)
 
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=home_assistant_delonghi_primadonna)
