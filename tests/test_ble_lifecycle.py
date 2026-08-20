@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -605,6 +606,53 @@ async def test_unanswered_profile_request_backs_off():
     )
 
 
+async def test_repeated_profile_failure_is_reported_once():
+    """An unchanging failure belongs in the log once, not on every retry.
+
+    Backing off reduced how often the profile request is repeated, but a
+    condition that does not change should be reported when it starts and
+    when it ends - not once per attempt forever.
+    """
+    device = make_device()
+    warnings = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record):
+            if record.levelno >= logging.WARNING:
+                warnings.append(record.getMessage())
+
+    async def never_answered():
+        return None
+
+    async def noop_send(message, retries=3, log_timeout=True):
+        return False
+
+    handler = _Collect()
+    device_module._LOGGER.addHandler(handler)
+    saved_params = device_module.READABLE_PARAMETERS
+    device_module.READABLE_PARAMETERS = []
+    try:
+        device._request_profile_names = never_answered
+        device.send_command = noop_send
+        device.sync_time = False
+        device._profiles_received = False
+
+        for _ in range(4):
+            # Force the retry every cycle: this tests the reporting, not
+            # the backoff, which has its own test.
+            device._last_switches_request = 0.0
+            device._profiles_retry_at = 0.0
+            await device.update_settings()
+    finally:
+        device_module.READABLE_PARAMETERS = saved_params
+        device_module._LOGGER.removeHandler(handler)
+
+    assert len(warnings) == 1, (
+        "an unchanging failure should be reported exactly once, got "
+        f"{len(warnings)}: {warnings}"
+    )
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -624,6 +672,7 @@ async def run_tests():
     await test_statistics_update_exception_is_contained_and_reschedulable()
     await test_statistics_schedule_respects_throttle()
     await test_unanswered_profile_request_backs_off()
+    await test_repeated_profile_failure_is_reported_once()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "
