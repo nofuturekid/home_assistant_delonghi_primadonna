@@ -674,6 +674,73 @@ async def test_command_names_are_human_readable():
     assert describe([0x0d]) == 'unknown'
 
 
+class _CollectWarnings(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        if record.levelno >= logging.WARNING:
+            self.messages.append(record.getMessage())
+
+
+async def _connect_with(device, lookup, establish=None):
+    """Drive get_device_name() with a stubbed BLE lookup, collecting warnings."""
+    handler = _CollectWarnings()
+    original_lookup = device_module.bluetooth.async_ble_device_from_address
+    original_establish = device_module.establish_connection
+    device_module._LOGGER.addHandler(handler)
+    device_module.bluetooth.async_ble_device_from_address = lookup
+    if establish is not None:
+        device_module.establish_connection = establish
+    try:
+        await device.get_device_name()
+    finally:
+        device_module.bluetooth.async_ble_device_from_address = original_lookup
+        device_module.establish_connection = original_establish
+        device_module._LOGGER.removeHandler(handler)
+    return handler.messages
+
+
+async def test_machine_out_of_range_is_not_a_warning():
+    """A machine that is switched off is not a fault.
+
+    _connect() raises when HA has no connectable route to the MAC, which
+    is exactly what an appliance that is off looks like. It surfaced as
+    two WARNING lines per attempt: _connect() logged and re-raised, and
+    the caller logged the same exception again.
+    """
+    device = make_device()
+
+    warnings = await _connect_with(device, lambda _h, _m, connectable: None)
+
+    assert device.connected is False
+    assert warnings == [], (
+        f"an unreachable machine should not warn, got: {warnings}"
+    )
+
+
+async def test_connect_failure_while_visible_warns_once():
+    """A machine in range that will not connect is worth exactly one line."""
+    device = make_device()
+    ble_device = object()
+
+    async def failing_establish(_cls, _dev, _name, max_attempts):
+        raise BleakError("connect failed")
+
+    warnings = await _connect_with(
+        device,
+        lambda _h, _m, connectable: ble_device,
+        establish=failing_establish,
+    )
+
+    assert device.connected is False
+    assert len(warnings) == 1, (
+        f"expected one warning for a real failure, got {len(warnings)}: "
+        f"{warnings}"
+    )
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -695,6 +762,8 @@ async def run_tests():
     await test_unanswered_profile_request_backs_off()
     await test_repeated_profile_failure_is_reported_once()
     await test_command_names_are_human_readable()
+    await test_machine_out_of_range_is_not_a_warning()
+    await test_connect_failure_while_visible_warns_once()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "

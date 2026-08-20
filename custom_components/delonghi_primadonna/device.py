@@ -225,6 +225,15 @@ RECIPE_ID_TO_BEVERAGE = {
 }
 
 
+class DeviceNotVisible(BleakError):
+    """No connectable adapter currently sees the machine.
+
+    This is what an appliance that is switched off looks like, so it is
+    an expected state rather than a fault. Subclasses BleakError so that
+    existing handlers keep working.
+    """
+
+
 def describe_command(message) -> str:
     """Name a command for log messages, falling back to its type byte."""
     if len(message) < 3:
@@ -330,6 +339,7 @@ class DelongiPrimadonna:
         self.is_dispensing = False
         self.dispensing_percentage = 0
         self._profiles_received = False
+        self._profiles_loaded = False
         self._profiles_retry_at = 0.0
         self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
         self._profile_request_start = 1
@@ -359,7 +369,6 @@ class DelongiPrimadonna:
             if pid > self._n_profiles:
                 AVAILABLE_PROFILES.pop(pid)
         self.profiles = list(AVAILABLE_PROFILES.values())
-        self._profiles_loaded = False
 
         # Build dynamic beverage list from machine recipes
         # name -> {id, coffee_qty, milk_qty}
@@ -479,8 +488,9 @@ class DelongiPrimadonna:
                 self._hass, self.mac, connectable=True
             )
             if not self._device:
-                raise BleakError(
-                    f"A device with address {self.mac} could not be found."
+                raise DeviceNotVisible(
+                    f"{self.mac} is not currently visible to a "
+                    f"connectable Bluetooth adapter"
                 )
 
             _LOGGER.info("Connect to %s", self.mac)
@@ -521,7 +531,9 @@ class DelongiPrimadonna:
 
         except Exception as error:
             self.connected = False
-            _LOGGER.warning(
+            # Both callers log this; reporting here as well produced two
+            # WARNING lines for one event.
+            _LOGGER.debug(
                 "BLE connect error: %s (type: %s)",
                 error,
                 type(error).__name__,
@@ -1000,7 +1012,12 @@ class DelongiPrimadonna:
                 _LOGGER.warning('BleakDBusError: %s', error)
             except BleakError as error:
                 self.connected = False
-                _LOGGER.warning('BleakError: %s', error)
+                _LOGGER.log(
+                    logging.DEBUG
+                    if isinstance(error, DeviceNotVisible)
+                    else logging.WARNING,
+                    'BleakError: %s', error
+                )
             except asyncio.exceptions.TimeoutError as error:
                 self.connected = False
                 _LOGGER.info('TimeoutError: %s at device connection', error)
@@ -1131,7 +1148,10 @@ class DelongiPrimadonna:
                     return response_received
                 except BleakError as error:
                     self.connected = False
-                    _LOGGER.warning(
+                    _LOGGER.log(
+                        logging.DEBUG
+                        if isinstance(error, DeviceNotVisible)
+                        else logging.WARNING,
                         'BleakError: %s (attempt %d)',
                         error,
                         attempt + 1
