@@ -809,12 +809,25 @@ class DelongiPrimadonna:
 
         self._device_status = hex_value
 
+    def _note_power_state(self, is_on: bool) -> None:
+        """Track the power state and re-ask for profile names on wake-up.
+
+        The machine answers the profile-name request only while it is
+        awake - in standby it stays silent - so waking up is the moment
+        to ask again rather than waiting out a backoff that has grown to
+        half an hour.
+        """
+        was_on = self.switches.is_on
+        self.switches.is_on = is_on
+        if is_on and not was_on and not self._profiles_received:
+            self._profiles_retry_at = 0.0
+            self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
+
     def _handle_monitor_data(
         self, monitor_data: MonitorData, answer_id: int, raw_packet: bytes
     ) -> None:
         """Apply parsed monitor data to device state."""
-        # Power state
-        self.switches.is_on = monitor_data.status > 0
+        self._note_power_state(monitor_data.status > 0)
 
         # Beverage dispensing: milk preparation (10), hot water (11),
         # or ReadyOrDispensing (7) with a non-zero progress counter

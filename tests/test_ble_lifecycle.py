@@ -795,6 +795,45 @@ async def test_get_device_name_does_not_load_profiles():
     assert device.active_profile_id == 1
 
 
+async def test_power_on_retries_profile_names_immediately():
+    """Waking up is the moment to ask for profile names again.
+
+    Measured on the machine: in standby it never answers the 0xA4
+    profile-name request, powered on it replies in about 250 ms. With the
+    backoff at its 30 minute ceiling the names would otherwise appear up
+    to half an hour after switching on, for an answer that takes a
+    quarter of a second.
+    """
+    device = make_device()
+    device._profiles_received = False
+    device._profiles_retry_delay = device_module.PROFILE_RETRY_MAX_INTERVAL
+    device._profiles_retry_at = time.monotonic() + 1800
+    device.switches.is_on = False
+
+    device._note_power_state(True)
+
+    assert device.switches.is_on is True
+    assert device._profiles_retry_at == 0.0
+    assert device._profiles_retry_delay == (
+        device_module.PROFILE_RETRY_MIN_INTERVAL
+    )
+
+
+async def test_power_on_leaves_backoff_alone_once_names_are_known():
+    """Names are read once; waking up again is no reason to re-ask."""
+    device = make_device()
+    device._profiles_received = True
+    device._profiles_retry_delay = device_module.PROFILE_RETRY_MAX_INTERVAL
+    scheduled = time.monotonic() + 1800
+    device._profiles_retry_at = scheduled
+    device.switches.is_on = False
+
+    device._note_power_state(True)
+
+    assert device.switches.is_on is True
+    assert device._profiles_retry_at == scheduled
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -819,6 +858,8 @@ async def run_tests():
     await test_machine_out_of_range_is_not_a_warning()
     await test_connect_failure_while_visible_warns_once()
     await test_get_device_name_does_not_load_profiles()
+    await test_power_on_retries_profile_names_immediately()
+    await test_power_on_leaves_backoff_alone_once_names_are_known()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "
