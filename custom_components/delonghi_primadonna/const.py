@@ -22,11 +22,14 @@ BEVERAGE_SERVICE_NAME = 'make_beverage'
 RAW_COMMAND_SERVICE_NAME = 'send_raw_command'
 
 # Mapping of profile id to profile name
+# Placeholders only: the real names are read from the machine (0xa4) as
+# soon as it is awake, and any profile beyond this dict is filled in as
+# "Profile N".
 AVAILABLE_PROFILES = {
     1: 'Profile 1',
     2: 'Profile 2',
     3: 'Profile 3',
-    4: 'Guest',
+    4: 'Profile 4',
 }
 
 POWER_OFF_OPTIONS = {
