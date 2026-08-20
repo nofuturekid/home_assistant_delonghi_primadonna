@@ -617,11 +617,27 @@ class DelongiPrimadonna:
         if not self._profiles_received and (
             current_time >= self._profiles_retry_at
         ):
+            first_attempt = (
+                self._profiles_retry_delay == PROFILE_RETRY_MIN_INTERVAL
+            )
             await self._request_profile_names()
             if self._profiles_received:
+                if not first_attempt:
+                    _LOGGER.info('Profile names received after retrying')
                 self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
                 self._profiles_retry_at = 0.0
             else:
+                if first_attempt:
+                    _LOGGER.warning(
+                        'No answer to the profile-name request; profile '
+                        'names stay at their defaults. Retrying quietly '
+                        'with a growing delay.'
+                    )
+                else:
+                    _LOGGER.debug(
+                        'Profile names still unanswered, next try in %ss',
+                        self._profiles_retry_delay,
+                    )
                 self._profiles_retry_at = (
                     time.monotonic() + self._profiles_retry_delay
                 )
@@ -1027,7 +1043,7 @@ class DelongiPrimadonna:
             # The response carries no start index; send_command waits
             # for the response, so remembering it here is safe.
             self._profile_request_start = start
-            await self.send_command(command)
+            await self.send_command(command, log_timeout=False)
             await asyncio.sleep(0.3)
 
     async def set_time(self, dt: datetime) -> None:
@@ -1082,7 +1098,9 @@ class DelongiPrimadonna:
         message = [int(x, 16) for x in command.split(' ')]
         await self.send_command(message)
 
-    async def send_command(self, message, retries=3) -> bool:
+    async def send_command(
+        self, message, retries=3, log_timeout: bool = True
+    ) -> bool:
         """Send a command and report whether a reply arrived.
 
         Correlation is only exact for statistics (0xA2), which are matched
@@ -1132,7 +1150,12 @@ class DelongiPrimadonna:
                             )
                             response_received = True
                         except asyncio.TimeoutError:
-                            _LOGGER.warning(
+                            # A caller that expects silence reports the
+                            # condition itself, once, instead of having
+                            # every attempt logged here.
+                            _LOGGER.log(
+                                logging.WARNING if log_timeout
+                                else logging.DEBUG,
                                 'Timeout waiting for a reply to the %s '
                                 'command: %s',
                                 describe_command(message_to_send),
