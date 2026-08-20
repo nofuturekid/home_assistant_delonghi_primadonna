@@ -29,3 +29,18 @@ make_beverage:
             - "espresso"
             - "americano"
             - "espresso2"
+
+send_raw_command:
+  name: Send raw command
+  description: >-
+    Send a hand-written packet to the machine, for protocol work. The
+    checksum is appended automatically, so leave it off - but the length
+    byte must already account for it. Replies appear in the debug log.
+  fields:
+    command:
+      name: Command
+      description: "Packet as hex, without checksum"
+      required: true
+      example: "0d 05 a9 f0"
+      selector:
+        text:
