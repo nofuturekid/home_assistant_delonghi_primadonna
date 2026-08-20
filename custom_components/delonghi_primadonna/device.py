@@ -1061,12 +1061,6 @@ class DelongiPrimadonna:
                 self.connected = False
                 raise
 
-        if self.connected and self.active_profile_id is None:
-            # Default to first profile until the user switches. Loading
-            # the names themselves is update_settings' job, which owns
-            # the retry policy for it.
-            self.active_profile_id = 1
-
     async def _request_profile_names(self) -> None:
         """Request profile names in ranges of three.
 

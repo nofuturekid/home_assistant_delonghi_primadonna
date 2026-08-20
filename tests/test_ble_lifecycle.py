@@ -791,8 +791,11 @@ async def test_get_device_name_does_not_load_profiles():
         "profile loading belongs to update_settings alone, but "
         "get_device_name requested it too"
     )
-    # The default profile selection must survive the removal
-    assert device.active_profile_id == 1
+    # The machine never reports which profile is active - measured: it is
+    # absent from the status frame and 0xa9 has no read form - so claiming
+    # one would be an invention. Stay unknown until Home Assistant itself
+    # switches.
+    assert device.active_profile_id is None
 
 
 async def test_power_on_retries_profile_names_immediately():
