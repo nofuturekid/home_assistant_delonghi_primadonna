@@ -9,8 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 
-from .const import BEVERAGE_SERVICE_NAME, DOMAIN
-from .device import BeverageEntityFeature, DelongiPrimadonna
+from .const import BEVERAGE_SERVICE_NAME, DOMAIN, RAW_COMMAND_SERVICE_NAME
+from .device import BeverageEntityFeature, DelongiPrimadonna, parse_raw_command
 
 PLATFORMS: list[str] = [
     Platform.IMAGE,
@@ -63,6 +63,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 vol.Required('beverage'): vol.In(
                     delonghi_device.available_beverages
                 ),
+                vol.Optional('entity_id'): vol.Coerce(str),
+                vol.Optional('device_id'): vol.Coerce(str),
+            }
+        ),
+    )
+
+    async def send_raw_command(call: ServiceCall) -> None:
+        """Send a hand-written packet, for protocol work.
+
+        The reply, if any, shows up in the debug log; enable debug
+        logging for this integration before using it.
+        """
+        command = parse_raw_command(call.data['command'])
+        _LOGGER.warning('Raw command out: %s', call.data['command'])
+        answered = await delonghi_device.send_command(command)
+        _LOGGER.warning('Raw command answered: %s', answered)
+
+    hass.services.async_register(
+        DOMAIN,
+        RAW_COMMAND_SERVICE_NAME,
+        send_raw_command,
+        schema=vol.Schema(
+            {
+                vol.Required('command'): vol.Coerce(str),
                 vol.Optional('entity_id'): vol.Coerce(str),
                 vol.Optional('device_id'): vol.Coerce(str),
             }

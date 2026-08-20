@@ -21,6 +21,7 @@ DEFAULT_IMAGE_URL = (
 )
 
 BEVERAGE_SERVICE_NAME = 'make_beverage'
+RAW_COMMAND_SERVICE_NAME = 'send_raw_command'
 
 # Mapping of profile id to profile name
 AVAILABLE_PROFILES = {
