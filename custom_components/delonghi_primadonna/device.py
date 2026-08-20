@@ -39,8 +39,9 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     HOTWATER_OFF, HOTWATER_ON, LONG_OFF, LONG_ON,
                     MACHINE_STATUS, NAME_CHARACTERISTIC, NOZZLE_STATE,
                     PARAM_AUTO_OFF, PARAM_SWITCHES, PARAM_WATER_HARDNESS,
-                    PARAM_WATER_TEMPERATURE, READABLE_PARAMETERS, START_COFFEE,
-                    STEAM_OFF, STEAM_ON, SWITCH_BIT_CUP_LIGHT,
+                    PARAM_WATER_TEMPERATURE, PROFILE_RETRY_MAX_INTERVAL,
+                    PROFILE_RETRY_MIN_INTERVAL, READABLE_PARAMETERS,
+                    START_COFFEE, STEAM_OFF, STEAM_ON, SWITCH_BIT_CUP_LIGHT,
                     SWITCH_BIT_ENERGY_SAVE, SWITCH_BIT_SOUNDS, WATER_SHORTAGE,
                     WATER_TANK_DETACHED)
 from .machine_switch import MachineSwitch, parse_switches
@@ -343,6 +344,8 @@ class DelongiPrimadonna:
         self._switches_raw: int | None = None
         self._last_switches_request = 0.0
         self._profiles_received = False
+        self._profiles_retry_at = 0.0
+        self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
         self._profile_request_start = 1
         self.auto_off_level: int | None = None
         self.water_hardness_level: int | None = None
@@ -611,8 +614,21 @@ class DelongiPrimadonna:
             message[5] = param
             await self.send_command(message)
             await asyncio.sleep(0.3)
-        if not self._profiles_received:
+        if not self._profiles_received and (
+            current_time >= self._profiles_retry_at
+        ):
             await self._request_profile_names()
+            if self._profiles_received:
+                self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
+                self._profiles_retry_at = 0.0
+            else:
+                self._profiles_retry_at = (
+                    time.monotonic() + self._profiles_retry_delay
+                )
+                self._profiles_retry_delay = min(
+                    self._profiles_retry_delay * 2,
+                    PROFILE_RETRY_MAX_INTERVAL,
+                )
 
     async def _event_trigger(self, value):
         """
