@@ -565,6 +565,46 @@ async def test_statistics_schedule_respects_throttle():
     assert hass.created_tasks == []
 
 
+async def test_unanswered_profile_request_backs_off():
+    """A machine that never answers 0xA4 must not be re-asked every cycle.
+
+    update_settings() retries _request_profile_names() while
+    _profiles_received is False. That flag is only set when a profile
+    response actually parses, so a machine that ignores the command
+    causes an unbounded retry: two commands, ten seconds of blocked
+    device lock each, once per settings cycle, forever.
+    """
+    device = make_device()
+    profile_calls = []
+
+    async def never_answered():
+        profile_calls.append(time.monotonic())
+
+    async def noop_send(message, retries=3):
+        return True
+
+    saved_params = device_module.READABLE_PARAMETERS
+    device_module.READABLE_PARAMETERS = []
+    try:
+        device._request_profile_names = never_answered
+        device.send_command = noop_send
+        device.sync_time = False
+        device._profiles_received = False
+
+        cycles = 5
+        for _ in range(cycles):
+            # Each iteration stands for a fresh settings cycle.
+            device._last_switches_request = 0.0
+            await device.update_settings()
+    finally:
+        device_module.READABLE_PARAMETERS = saved_params
+
+    assert len(profile_calls) < cycles, (
+        "profile request was repeated on every cycle "
+        f"({len(profile_calls)}/{cycles}) - no backoff"
+    )
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -583,6 +623,7 @@ async def run_tests():
     await test_failed_statistics_attempt_is_throttled()
     await test_statistics_update_exception_is_contained_and_reschedulable()
     await test_statistics_schedule_respects_throttle()
+    await test_unanswered_profile_request_backs_off()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "

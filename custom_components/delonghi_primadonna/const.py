@@ -149,6 +149,12 @@ PARAM_SWITCHES = 0x3F
 PARAM_AUTO_OFF = 0x3E
 PARAM_WATER_HARDNESS = 0x32
 PARAM_WATER_TEMPERATURE = 0x3D
+# A machine that never answers the profile-name request (0xA4) must not
+# be re-asked on every settings cycle: each attempt holds the device lock
+# for the full command timeout, starving every other command.
+PROFILE_RETRY_MIN_INTERVAL = 30
+PROFILE_RETRY_MAX_INTERVAL = 1800
+
 READABLE_PARAMETERS = (
     PARAM_SWITCHES,
     PARAM_AUTO_OFF,

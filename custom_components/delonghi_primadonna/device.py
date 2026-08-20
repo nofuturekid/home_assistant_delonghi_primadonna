@@ -28,6 +28,8 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     BYTES_STATISTICS_COMMAND,
                     PARAM_AUTO_OFF, PARAM_SWITCHES,
                     PARAM_WATER_HARDNESS, PARAM_WATER_TEMPERATURE,
+                    PROFILE_RETRY_MAX_INTERVAL,
+                    PROFILE_RETRY_MIN_INTERVAL,
                     READABLE_PARAMETERS, SWITCH_BIT_CUP_LIGHT,
                     SWITCH_BIT_ENERGY_SAVE, SWITCH_BIT_SOUNDS,
                     BYTES_READ_PARAMETER, BYTES_SWITCH_COMMAND,
@@ -320,6 +322,8 @@ class DelongiPrimadonna:
         self.is_dispensing = False
         self.dispensing_percentage = 0
         self._profiles_received = False
+        self._profiles_retry_at = 0.0
+        self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
         self._profile_request_start = 1
         self._last_time_sync = 0.0
         self.auto_off_level: int | None = None
@@ -582,8 +586,21 @@ class DelongiPrimadonna:
             message[5] = param
             await self.send_command(message)
             await asyncio.sleep(0.3)
-        if not self._profiles_received:
+        if not self._profiles_received and (
+            current_time >= self._profiles_retry_at
+        ):
             await self._request_profile_names()
+            if self._profiles_received:
+                self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
+                self._profiles_retry_at = 0.0
+            else:
+                self._profiles_retry_at = (
+                    time.monotonic() + self._profiles_retry_delay
+                )
+                self._profiles_retry_delay = min(
+                    self._profiles_retry_delay * 2,
+                    PROFILE_RETRY_MAX_INTERVAL,
+                )
         if self.sync_time and (
             current_time - self._last_time_sync > 24 * 3600
         ):
