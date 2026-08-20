@@ -230,6 +230,34 @@ class DeviceNotVisible(BleakError):
     """
 
 
+def parse_raw_command(text: str) -> list[int]:
+    """Turn hand-written hex into a byte list for send_command().
+
+    Accepts "0d 05 a9 f0", "0D:05:A9:F0" or "0d05a9f0". Two placeholder
+    bytes are appended because send_command() overwrites the last two
+    with the checksum, so the packet is written without one - but its
+    length byte must already account for it.
+    """
+    cleaned = text.replace(':', ' ').replace(',', ' ').strip()
+    if not cleaned:
+        raise ValueError('No command given')
+    if ' ' in cleaned:
+        parts = cleaned.split()
+    else:
+        if len(cleaned) % 2:
+            raise ValueError('Uneven number of hex digits')
+        parts = [cleaned[i:i + 2] for i in range(0, len(cleaned), 2)]
+    try:
+        command = [int(part, 16) for part in parts]
+    except ValueError as error:
+        raise ValueError(f'Not hexadecimal: {text!r}') from error
+    if any(byte > 0xFF for byte in command):
+        raise ValueError('Values above one byte')
+    if len(command) < 3:
+        raise ValueError('A command needs at least three bytes')
+    return command + [0x00, 0x00]
+
+
 def describe_command(message) -> str:
     """Name a command for log messages, falling back to its type byte."""
     if len(message) < 3:

@@ -834,6 +834,29 @@ async def test_power_on_leaves_backoff_alone_once_names_are_known():
     assert device._profiles_retry_at == scheduled
 
 
+async def test_raw_command_parsing():
+    """Hex in, byte list out, with room for the CRC send_command appends.
+
+    send_command() overwrites the last two bytes with the checksum, so a
+    hand-written packet is given without one and gets two placeholders.
+    """
+    parse = device_module.parse_raw_command
+    expected = [0x0D, 0x05, 0xA9, 0xF0, 0x00, 0x00]
+
+    assert parse("0d 05 a9 f0") == expected
+    assert parse("0D:05:A9:F0") == expected
+    assert parse("0d05a9f0") == expected
+    assert parse("  0d, 05, a9, f0  ") == expected
+
+    for rubbish in ("", "0d 05", "zz 05 a9"):
+        try:
+            parse(rubbish)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{rubbish!r} should be rejected")
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -860,6 +883,7 @@ async def run_tests():
     await test_get_device_name_does_not_load_profiles()
     await test_power_on_retries_profile_names_immediately()
     await test_power_on_leaves_backoff_alone_once_names_are_known()
+    await test_raw_command_parsing()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "
