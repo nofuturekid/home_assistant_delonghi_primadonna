@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 from binascii import hexlify, unhexlify
 
 sys.path.append(
@@ -60,6 +61,7 @@ def statistics_message(start_index=100, count=10):
 async def test_matching_statistics_response():
     device = make_device()
     device._expected_statistics_start = 100
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(LOG_PACKET, " ")
     device._event_trigger = no_event
@@ -74,6 +76,7 @@ async def test_matching_statistics_response():
 async def test_wrong_statistics_start_is_ignored():
     device = make_device()
     device._expected_statistics_start = 110
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(LOG_PACKET, " ")
     device._event_trigger = no_event
@@ -88,6 +91,7 @@ async def test_wrong_statistics_start_is_ignored():
 async def test_sparse_statistics_response_matches_111():
     device = make_device()
     device._expected_statistics_start = 111
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(SPARSE_111_PACKET, " ")
     device._event_trigger = no_event
@@ -106,6 +110,7 @@ async def test_sparse_statistics_response_matches_111():
 async def test_sparse_statistics_response_advances_from_110_to_111():
     device = make_device()
     device._expected_statistics_start = 110
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(SPARSE_111_PACKET, " ")
     device._event_trigger = no_event
@@ -129,6 +134,7 @@ async def test_sparse_statistics_response_advances_from_3077_to_23000():
         "00 ce"
     )
     device._expected_statistics_start = 3077
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(packet, " ")
     device._event_trigger = no_event
@@ -151,6 +157,7 @@ async def test_short_statistics_response_is_ignored():
     )
 
     device._expected_statistics_start = 100
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(packet, " ")
     device._event_trigger = no_event
@@ -164,6 +171,7 @@ async def test_short_statistics_response_is_ignored():
 async def test_stale_statistics_response_is_ignored():
     device = make_device()
     device._expected_statistics_start = None
+    device._expected_answer_id = 0x95
     device._response_event = asyncio.Event()
     device._device_status = hexlify(LOG_PACKET, " ")
     device._event_trigger = no_event
@@ -179,6 +187,7 @@ async def test_monitor_packet_does_not_release_statistics_waiter():
     packet = bytes([0xD0, 0x02, 0x70])
 
     device._expected_statistics_start = 100
+    device._expected_answer_id = 0xA2
     device._response_event = asyncio.Event()
     device._device_status = hexlify(packet, " ")
     device._event_trigger = no_event
@@ -412,6 +421,69 @@ async def test_statistics_polling_starts_second_block_at_111():
     ]
 
 
+async def test_foreign_answer_id_does_not_release_waiter():
+    """A status frame must not satisfy a wait for a different command.
+
+    Measured on the machine: unsolicited 0x75 status frames arrive every
+    few seconds while it is awake. Releasing any pending wait on them
+    attributes a reply to whatever command happened to be in flight.
+    """
+    device = make_device()
+    status_frame = bytes([0xD0, 0x02, 0x75])
+
+    device._expected_answer_id = 0x95
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(status_frame, " ")
+    device._event_trigger = no_event
+
+    original_parser = device_module.parse_monitor_data
+    device_module.parse_monitor_data = lambda _value: None
+    try:
+        await device._handle_data(None, status_frame)
+    finally:
+        device_module.parse_monitor_data = original_parser
+
+    assert not device._response_event.is_set()
+
+
+async def test_matching_answer_id_releases_waiter():
+    """The reply carries the request id, which is what identifies it."""
+    device = make_device()
+    reply = unhexlify("d00b950f003d00000001bd2d")
+
+    device._expected_answer_id = 0x95
+    device._response_event = asyncio.Event()
+    device._device_status = hexlify(reply, " ")
+    device._event_trigger = no_event
+
+    await device._handle_data(None, reply)
+
+    assert device._response_event.is_set()
+
+
+async def test_power_command_does_not_wait_for_a_reply():
+    """The machine never answers 0x84, so waiting only blocks the lock.
+
+    Measured: six power commands in one evening produced no 0x84 frame at
+    all. The wait was released by whatever unrelated frame arrived first,
+    which is both wrong and slow.
+    """
+    device = make_device()
+    device._client = FakeClient()
+    device._connect = fake_connect
+
+    started = time.monotonic()
+    result = await device.send_command(
+        [0x0D, 0x07, 0x84, 0x0F, 0x02, 0x01, 0x00, 0x00],
+        retries=1,
+    )
+    elapsed = time.monotonic() - started
+
+    assert result is True
+    assert elapsed < 1, f"waited {elapsed:.1f}s for a reply that never comes"
+    assert device._response_event is None
+
+
 async def run_tests():
     await test_matching_statistics_response()
     await test_wrong_statistics_start_is_ignored()
@@ -421,6 +493,9 @@ async def run_tests():
     await test_short_statistics_response_is_ignored()
     await test_stale_statistics_response_is_ignored()
     await test_monitor_packet_does_not_release_statistics_waiter()
+    await test_foreign_answer_id_does_not_release_waiter()
+    await test_matching_answer_id_releases_waiter()
+    await test_power_command_does_not_wait_for_a_reply()
     await test_matching_statistics_command_returns_true()
     await test_matching_sparse_statistics_command_returns_true()
     await test_non_statistics_command_returns_true()

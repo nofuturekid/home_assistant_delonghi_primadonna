@@ -32,17 +32,18 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     COFFEE_GROUNDS_CONTAINER_CLEAN,
                     COFFEE_GROUNDS_CONTAINER_DETACHED,
                     COFFEE_GROUNDS_CONTAINER_FULL, COMMAND_NAMES,
-                    CONTROLL_CHARACTERISTIC, DEBUG, DEFAULT_IMAGE_URL,
-                    DEVICE_READY, DEVICE_STATUS, DEVICE_TURNOFF, DOMAIN,
-                    DOPPIO_OFF, DOPPIO_ON, ESPRESSO2_OFF, ESPRESSO2_ON,
-                    ESPRESSO_OFF, ESPRESSO_ON, HOTWATER_OFF, HOTWATER_ON,
-                    LONG_OFF, LONG_ON, MACHINE_STATUS, NAME_CHARACTERISTIC,
-                    NOZZLE_STATE, PARAM_AUTO_OFF, PARAM_SWITCHES,
-                    PARAM_WATER_HARDNESS, PARAM_WATER_TEMPERATURE,
-                    PROFILE_RETRY_MAX_INTERVAL, PROFILE_RETRY_MIN_INTERVAL,
-                    READABLE_PARAMETERS, START_COFFEE, STEAM_OFF, STEAM_ON,
-                    SWITCH_BIT_CUP_LIGHT, SWITCH_BIT_ENERGY_SAVE,
-                    SWITCH_BIT_SOUNDS, WATER_SHORTAGE, WATER_TANK_DETACHED)
+                    COMMANDS_WITHOUT_RESPONSE, CONTROLL_CHARACTERISTIC, DEBUG,
+                    DEFAULT_IMAGE_URL, DEVICE_READY, DEVICE_STATUS,
+                    DEVICE_TURNOFF, DOMAIN, DOPPIO_OFF, DOPPIO_ON,
+                    ESPRESSO2_OFF, ESPRESSO2_ON, ESPRESSO_OFF, ESPRESSO_ON,
+                    HOTWATER_OFF, HOTWATER_ON, LONG_OFF, LONG_ON,
+                    MACHINE_STATUS, NAME_CHARACTERISTIC, NOZZLE_STATE,
+                    PARAM_AUTO_OFF, PARAM_SWITCHES, PARAM_WATER_HARDNESS,
+                    PARAM_WATER_TEMPERATURE, PROFILE_RETRY_MAX_INTERVAL,
+                    PROFILE_RETRY_MIN_INTERVAL, READABLE_PARAMETERS,
+                    START_COFFEE, STEAM_OFF, STEAM_ON, SWITCH_BIT_CUP_LIGHT,
+                    SWITCH_BIT_ENERGY_SAVE, SWITCH_BIT_SOUNDS, WATER_SHORTAGE,
+                    WATER_TANK_DETACHED)
 from .machine_switch import MachineSwitch, parse_switches
 from .model import get_machine_model
 
@@ -354,6 +355,7 @@ class DelongiPrimadonna:
         self._rx_buffer = bytearray()
         self._response_event = None
         self._expected_statistics_start: int | None = None
+        self._expected_answer_id: int | None = None
         self._last_response: bytes | None = None
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
@@ -817,11 +819,12 @@ class DelongiPrimadonna:
             self._response_event is not None
             and not self._response_event.is_set()
         ):
-            response_matches = (
-                statistics_response_matches
-                if expected_statistics_start is not None
-                else answer_id != 0xA2
-            )
+            # The reply carries the request id (see DEBUG_NOTES); a
+            # frame with any other id belongs to something else, most
+            # often an unsolicited status update.
+            response_matches = answer_id == self._expected_answer_id
+            if response_matches and expected_statistics_start is not None:
+                response_matches = statistics_response_matches
             if response_matches:
                 self._response_event.set()
 
@@ -1135,7 +1138,16 @@ class DelongiPrimadonna:
                         hexlify(bytearray(message_to_send), " ")
                     )
 
-                    self._response_event = asyncio.Event()
+                    expects_reply = (
+                        message_to_send[2]
+                        not in COMMANDS_WITHOUT_RESPONSE
+                    )
+                    if expects_reply:
+                        self._response_event = asyncio.Event()
+                        self._expected_answer_id = message_to_send[2]
+                    else:
+                        self._response_event = None
+                        self._expected_answer_id = None
                     if (
                         len(message_to_send) > 5
                         and message_to_send[2] == 0xA2
@@ -1146,12 +1158,14 @@ class DelongiPrimadonna:
                     else:
                         self._expected_statistics_start = None
 
-                    response_received = False
+                    response_received = not expects_reply
                     try:
                         await self._client.write_gatt_char(
                             CONTROLL_CHARACTERISTIC,
                             bytearray(message_to_send),
                         )
+                        if not expects_reply:
+                            return True
                         try:
                             await asyncio.wait_for(
                                 self._response_event.wait(),
@@ -1172,6 +1186,7 @@ class DelongiPrimadonna:
                             )
                     finally:
                         self._response_event = None
+                        self._expected_answer_id = None
                         self._expected_statistics_start = None
 
                     return response_received
