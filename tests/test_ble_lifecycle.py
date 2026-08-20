@@ -741,6 +741,60 @@ async def test_connect_failure_while_visible_warns_once():
     )
 
 
+class FakeNamedClient(FakeConnectClient):
+    """A connected client that also answers the name read."""
+
+    async def read_gatt_char(self, _characteristic):
+        return b"TESTNAME"
+
+    async def write_gatt_char(self, _characteristic, _message):
+        return None
+
+
+async def test_get_device_name_does_not_load_profiles():
+    """Profile loading must have exactly one owner.
+
+    get_device_name() used to request profile names as well, guarded by
+    _profiles_loaded - a flag set after the *attempt*, so that path gave
+    up after one try while update_settings() retried on _profiles_received,
+    set only after *success*. Two policies for one job is what allowed the
+    unbounded retry to go unnoticed.
+    """
+    device = make_device()
+    client = FakeNamedClient()
+    calls = []
+
+    async def record():
+        calls.append(1)
+
+    device._request_profile_names = record
+
+    original_lookup = device_module.bluetooth.async_ble_device_from_address
+    original_establish = device_module.establish_connection
+    ble_device = object()
+
+    async def establish(_cls, _dev, _name, max_attempts):
+        return client
+
+    device_module.bluetooth.async_ble_device_from_address = (
+        lambda _h, _m, connectable: ble_device
+    )
+    device_module.establish_connection = establish
+    try:
+        await device.get_device_name()
+    finally:
+        device_module.bluetooth.async_ble_device_from_address = original_lookup
+        device_module.establish_connection = original_establish
+
+    assert device.connected is True
+    assert calls == [], (
+        "profile loading belongs to update_settings alone, but "
+        "get_device_name requested it too"
+    )
+    # The default profile selection must survive the removal
+    assert device.active_profile_id == 1
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -764,6 +818,7 @@ async def run_tests():
     await test_command_names_are_human_readable()
     await test_machine_out_of_range_is_not_a_warning()
     await test_connect_failure_while_visible_warns_once()
+    await test_get_device_name_does_not_load_profiles()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "

@@ -339,7 +339,6 @@ class DelongiPrimadonna:
         self.is_dispensing = False
         self.dispensing_percentage = 0
         self._profiles_received = False
-        self._profiles_loaded = False
         self._profiles_retry_at = 0.0
         self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
         self._profile_request_start = 1
@@ -1025,12 +1024,11 @@ class DelongiPrimadonna:
                 self.connected = False
                 raise
 
-        if self.connected and not self._profiles_loaded:
-            await self._request_profile_names()
-            # Default to first profile until the user switches
-            if self.active_profile_id is None:
-                self.active_profile_id = 1
-            self._profiles_loaded = True
+        if self.connected and self.active_profile_id is None:
+            # Default to first profile until the user switches. Loading
+            # the names themselves is update_settings' job, which owns
+            # the retry policy for it.
+            self.active_profile_id = 1
 
     async def _request_profile_names(self) -> None:
         """Request profile names in ranges of three.
