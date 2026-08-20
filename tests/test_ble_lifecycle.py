@@ -653,6 +653,27 @@ async def test_repeated_profile_failure_is_reported_once():
     )
 
 
+async def test_command_names_are_human_readable():
+    """A timeout line must say what failed, not only dump bytes.
+
+    "Timeout waiting for response to command: b'0d 07 e2 f0 12 06 97 ae'"
+    requires reverse-engineering the protocol to act on. The command type
+    lives in byte 2 and has a name.
+    """
+    describe = device_module.describe_command
+
+    # 0xE2 with hour/minute: the clock sync
+    assert describe([0x0d, 0x07, 0xE2, 0xF0, 0x12, 0x06, 0x97, 0xae]) == \
+        'clock'
+    assert describe(list(BYTES_STATISTICS_COMMAND)) == 'statistics'
+    assert describe([0x0d, 0x07, 0xA4, 0xF0]) == 'profile names'
+    assert describe([0x0d, 0x07, 0x95, 0x0F]) == 'read setting'
+
+    # Unknown or malformed commands still identify themselves
+    assert describe([0x0d, 0x07, 0x42]) == '0x42'
+    assert describe([0x0d]) == 'unknown'
+
+
 async def run_tests():
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
@@ -673,6 +694,7 @@ async def run_tests():
     await test_statistics_schedule_respects_throttle()
     await test_unanswered_profile_request_backs_off()
     await test_repeated_profile_failure_is_reported_once()
+    await test_command_names_are_human_readable()
 
     print(
         "[SUCCESS] BLE lifecycle regressions "

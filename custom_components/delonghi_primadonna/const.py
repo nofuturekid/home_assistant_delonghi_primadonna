@@ -152,6 +152,19 @@ PARAM_WATER_TEMPERATURE = 0x3D
 # A machine that never answers the profile-name request (0xA4) must not
 # be re-asked on every settings cycle: each attempt holds the device lock
 # for the full command timeout, starving every other command.
+# Command type lives in byte 2. Used to name a command in log messages,
+# so a timeout says what failed instead of only dumping its bytes.
+COMMAND_NAMES = {
+    0x75: 'status poll',
+    0x83: 'beverage',
+    0x84: 'power',
+    0x90: 'write setting',
+    0x95: 'read setting',
+    0xA2: 'statistics',
+    0xA4: 'profile names',
+    0xE2: 'clock',
+}
+
 PROFILE_RETRY_MIN_INTERVAL = 30
 PROFILE_RETRY_MAX_INTERVAL = 1800
 

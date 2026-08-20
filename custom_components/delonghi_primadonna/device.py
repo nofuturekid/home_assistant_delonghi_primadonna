@@ -23,6 +23,7 @@ from homeassistant.const import CONF_MAC, CONF_MODEL, CONF_NAME
 from homeassistant.core import HomeAssistant
 
 from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
+                    COMMAND_NAMES,
                     BASE_COMMAND, BEVERAGE_NONE, BYTES_AUTOPOWEROFF_COMMAND,
                     BYTES_LOAD_PROFILES, BYTES_POWER, BYTES_POWER_OFF,
                     BYTES_STATISTICS_COMMAND,
@@ -222,6 +223,13 @@ RECIPE_ID_TO_BEVERAGE = {
     16: AvailableBeverage.HOTWATER,    # Hot Water
     17: AvailableBeverage.STEAM,       # Steam
 }
+
+
+def describe_command(message) -> str:
+    """Name a command for log messages, falling back to its type byte."""
+    if len(message) < 3:
+        return 'unknown'
+    return COMMAND_NAMES.get(message[2], f'0x{message[2]:02x}')
 
 
 def _build_stop_command(recipe_id: int) -> list[int]:
@@ -1111,7 +1119,9 @@ class DelongiPrimadonna:
                             _LOGGER.log(
                                 logging.WARNING if log_timeout
                                 else logging.DEBUG,
-                                'Timeout waiting for response to command: %s',
+                                'Timeout waiting for a reply to the %s '
+                                'command: %s',
+                                describe_command(message_to_send),
                                 hexlify(bytearray(message_to_send), " ")
                             )
                     finally:
