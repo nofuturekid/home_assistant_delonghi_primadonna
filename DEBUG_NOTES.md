@@ -78,14 +78,31 @@ The request id is the third byte of the command, the response id must be the sam
 | 0x83     | Prepare or manage beverage                          |
 | 0x84     | Power on command                                    |
 | 0x90     | Manage device settings                              |
-| 0x95     |                                                     |
+| 0x95     | Read a settings parameter                           |
 | 0xa2     | Statistics request/response                         |
-| 0xa3     |                                                     |
+| 0xa3     | Checksum                                            |
 | 0xa4     | Request profile list (answered only while awake)    |
-| 0xa5     |                                                     |
+| 0xa5     | Write profile names                                 |
 | 0xa9     | Switch the user profile                             |
-| 0xaa     |                                                     |
-| 0xd2     |                                                     |
+| 0xaa     | Read recipe names (same layout as 0xa4)             |
+| 0xd2     | Read the machine PIN                                |
+| 0xa1     | Read a parameter, extended form                     |
+| 0xa6     | Read a recipe quantity for one profile              |
+| 0xa8     | Read recipe priorities                              |
+| 0xab     | Write recipe names                                  |
+| 0xad     | Set favourite beverages                             |
+| 0xb0     | Read min/max bounds for a beverage                  |
+| 0xb1     | Set the machine PIN                                 |
+| 0xb9-0xbb| Bean system select / read / write                   |
+| 0xe2     | Set the clock                                       |
+
+Numbers cross-checked against longshot's `EcamRequestId`.
+
+**A reply carries the id of its request.** Unsolicited status frames
+(`0x75`) arrive every few seconds while the machine is awake, so a
+pending request must only be considered answered by a frame with a
+matching id. `0x84` (power) and `0xe2` (clock) are never answered at
+all - waiting for them only blocks the device lock.
 
 Switches managed by command [0x0d, 0x0b, 0x90, 0x0f, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 The nine digit (counted from 0) is the command bitmask
