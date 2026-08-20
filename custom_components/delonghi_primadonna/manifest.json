@@ -10,15 +10,15 @@
     }
   ],
   "codeowners": [
-    "@arbuzov"
+    "@nofuturekid"
   ],
   "config_flow": true,
   "dependencies": [
     "bluetooth",
     "http"
   ],
-  "documentation": "https://github.com/Arbuzov/home_assistant_delonghi_primadonna",
+  "documentation": "https://github.com/nofuturekid/home_assistant_delonghi_primadonna",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/Arbuzov/home_assistant_delonghi_primadonna/issues",
+  "issue_tracker": "https://github.com/nofuturekid/home_assistant_delonghi_primadonna/issues",
   "version": "1.18.3"
 }
