@@ -123,6 +123,12 @@ MACHINE_STATUS = {
 """
 Command bytes
 """
+# The machine does not answer these, so waiting for a reply only holds
+# the device lock for the full timeout. Measured: six power commands in
+# one evening produced no 0x84 frame at all, and the clock command times
+# out even while the machine is awake.
+COMMANDS_WITHOUT_RESPONSE = frozenset({0x84, 0xE2})
+
 # Command type lives in byte 2. Used to name a command in log messages,
 # so a timeout says what failed instead of only dumping its bytes.
 COMMAND_NAMES = {
