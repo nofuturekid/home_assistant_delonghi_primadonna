@@ -861,12 +861,18 @@ class DelongiPrimadonna:
         """Apply parsed monitor data to device state."""
         self._note_power_state(monitor_data.status > 0)
 
-        # Beverage dispensing: milk preparation (10), hot water (11),
-        # or ReadyOrDispensing (7) with a non-zero progress counter
-        # (state 7 covers both idle and dispensing; the progress byte
+        # Beverage dispensing: steam (5), milk preparation (10),
+        # hot water (11), or ReadyOrDispensing (7) with a non-zero progress
+        # counter (state 7 covers both idle and dispensing; the progress byte
         # tells them apart — same rule as longshot's EcamStatus::Busy).
+        # State 5 added 2026-08-22: a 96 s steam dispense reported state 5
+        # throughout with a clean progress curve in byte 11, and never state 7,
+        # so the sensor stayed off for the entire dispense.
+        # Maintenance programs are deliberately NOT counted as dispensing:
+        # descaling (4), milk system cleaning (12) and filter change (14) also
+        # report progress, but they are not beverages.
         self.is_dispensing = (
-            monitor_data.status in (10, 11)
+            monitor_data.status in (5, 10, 11)
             or (monitor_data.status == 7 and monitor_data.sub_status != 0)
         )
         self.dispensing_percentage = (

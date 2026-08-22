@@ -165,7 +165,9 @@
           "preparing": "Vorbereitung",
           "delivering_hot_water": "Heißwasserausgabe",
           "cleaning_milk_spout": "Milchauslauf reinigen",
-          "descaling": "Entkalken"
+          "descaling": "Entkalken",
+          "delivering_steam": "Dampfbezug",
+          "changing_filter": "Filterwechsel"
         }
       },
       "total_coffee": {

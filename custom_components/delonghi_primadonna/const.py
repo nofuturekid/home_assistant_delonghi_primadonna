@@ -98,20 +98,28 @@ MACHINE_STATUS = {
     0: "turned_off",
     1: "heating",
     # Measured 2026-08-20: status 2 appears immediately after the
-    # power-off command, matching longshot's ShuttingDown. Values 4, 5, 6
-    # and 14 are still unverified and disagree with longshot (Descaling,
-    # SteamPreparation, Recovery, and 16 = ChocolatePreparation).
+    # power-off command, matching longshot's ShuttingDown.
     2: "shutting_down",
     3: "heating",
-    4: "heating",
-    5: "ready",  # Old / v1 Ready
+    # Measured 2026-08-22 on an ECAM 656.55.MS during a full descaling run:
+    # 4 is set from the moment the descaling program is armed until it ends,
+    # including while pumping - it is the program state, not "descaling now".
+    # Previously mapped to "heating", and 14 wrongly carried this label.
+    4: "descaling",
+    # Measured 2026-08-22: 96 s steam dispense with a full progress curve in
+    # byte 11 (sub_status 02 -> 04 -> 06). Previously mapped to "ready", which
+    # made the status sensor report an idle machine while steam was running.
+    5: "delivering_steam",
     6: "brewing",
     7: "ready",  # v2 Ready
     8: "rinsing",
     10: "preparing",
     11: "delivering_hot_water",
+    # Measured 2026-08-22: knob on CLEAN, ~24 s, progress in byte 11.
     12: "cleaning_milk_spout",
-    14: "descaling",
+    # Measured 2026-08-22: rinse cycle after confirming a filter change.
+    # A separate program in the machine's menu, hence its own top-level state.
+    14: "changing_filter",
 }
 
 """

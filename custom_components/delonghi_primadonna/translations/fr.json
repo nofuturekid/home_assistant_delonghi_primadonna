@@ -165,7 +165,9 @@
           "preparing": "Préparation",
           "delivering_hot_water": "Distribution d'eau chaude",
           "cleaning_milk_spout": "Nettoyage de la buse à lait",
-          "descaling": "Détartrage"
+          "descaling": "Détartrage",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

@@ -165,7 +165,9 @@
           "preparing": "Pregătire",
           "delivering_hot_water": "Distribuire apă fierbinte",
           "cleaning_milk_spout": "Curățare duză de lapte",
-          "descaling": "Decalcifiere"
+          "descaling": "Decalcifiere",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

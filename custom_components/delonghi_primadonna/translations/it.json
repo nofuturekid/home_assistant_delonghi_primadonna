@@ -165,7 +165,9 @@
           "preparing": "Preparazione",
           "delivering_hot_water": "Erogazione acqua calda",
           "cleaning_milk_spout": "Pulizia beccuccio latte",
-          "descaling": "Decalcificazione"
+          "descaling": "Decalcificazione",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {
