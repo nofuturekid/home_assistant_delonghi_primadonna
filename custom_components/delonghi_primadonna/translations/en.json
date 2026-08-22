@@ -165,7 +165,9 @@
           "preparing": "Preparing",
           "delivering_hot_water": "Delivering Hot Water",
           "cleaning_milk_spout": "Cleaning Milk Spout",
-          "descaling": "Descaling"
+          "descaling": "Descaling",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

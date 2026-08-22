@@ -165,7 +165,9 @@
           "preparing": "Подготовка",
           "delivering_hot_water": "Подача горячей воды",
           "cleaning_milk_spout": "Очистка насадки для молока",
-          "descaling": "Очистка от накипи"
+          "descaling": "Очистка от накипи",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

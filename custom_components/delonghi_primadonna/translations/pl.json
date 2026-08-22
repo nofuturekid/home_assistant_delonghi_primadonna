@@ -165,7 +165,9 @@
           "preparing": "Przygotowywanie",
           "delivering_hot_water": "Wydawanie gorącej wody",
           "cleaning_milk_spout": "Czyszczenie dyszy mleka",
-          "descaling": "Odkamienianie"
+          "descaling": "Odkamienianie",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

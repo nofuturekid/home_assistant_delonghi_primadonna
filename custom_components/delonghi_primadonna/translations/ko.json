@@ -165,7 +165,9 @@
           "preparing": "준비 중",
           "delivering_hot_water": "온수 추출 중",
           "cleaning_milk_spout": "우유 배출구 세척",
-          "descaling": "스케일 제거"
+          "descaling": "스케일 제거",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

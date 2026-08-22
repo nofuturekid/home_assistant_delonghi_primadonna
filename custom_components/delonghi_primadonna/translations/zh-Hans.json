@@ -165,7 +165,9 @@
           "preparing": "准备中",
           "delivering_hot_water": "出热水中",
           "cleaning_milk_spout": "清洗牛奶出口",
-          "descaling": "除垢"
+          "descaling": "除垢",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {

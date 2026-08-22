@@ -98,6 +98,57 @@ The request id is the third byte of the command, the response id must be the sam
 
 Numbers cross-checked against longshot's `EcamRequestId`.
 
+### Verified on an ECAM 656.55.MS, 2026-08-22
+
+A full descaling run plus filter change, milk-system cleaning and steam
+dispensing were captured over the 0x75 status frame.
+
+**Machine states (byte 9)** - four values measured directly, correcting the
+previous table: `4` = descaling program (set from the moment the program is
+armed until it ends, including while pumping - previously mapped to "heating"),
+`5` = steam dispensing (96 s, full progress curve - previously "ready"),
+`12` = milk system cleaning (~24 s), `14` = filter change program (previously
+carrying the "descaling" label that belongs to 4). Only `6` remains unverified.
+
+**Byte 8 bit 0x08** mirrors the running program: it appeared in the very same
+frame as state 4 and cleared with the program end.
+
+**Byte 11** is progress in percent, but the descaling program never populates it
+(constant 00). Steam, milk cleaning and heat-up do. A remaining-time display for
+descaling is therefore not possible.
+
+**Byte 4 is a mechanical coding pin, not a presence sensor.** The attachment is
+inserted from the front and carries a pin whose insertion depth is measured:
+`00` none, `01` water spout / steam nozzle, `02` milk container, `04` milk
+container with the knob on CLEAN. The value reflects the position, not the
+activity - `04` persists after the cleaning program has finished. The three foam
+levels are purely mechanical and invisible in the protocol.
+
+**Only one missing part is reported at a time.** With both the water tank and
+the grounds container removed, only bit 0x08 (grounds container) was set; bit
+0x10 (water tank) appeared only after the container was back in. The display
+behaves identically. A "water tank missing" sensor therefore stays silent while
+the grounds container is also missing - which is the normal case during
+descaling. This cannot be fixed in the integration; the information is not sent.
+Brew group and side door produce no bit at all, though this could not be proven
+independently: both are only accessible with the tank removed, so their bit
+would always be masked by 0x10.
+
+**Send rate:** 266 measured intervals show a fixed `12 24 24` pattern - a
+60-second period, three frames per minute while idle, switching to a steady 12 s
+during a dispense. There is not a single 36 s gap, which rules out packet loss.
+Consequence: a 25-30 s espresso may fall into a single frame or none at all, so
+a live dispensing sensor can never be fully reliable.
+
+**Opcode 0xa3** requires flag byte `f0`; with `0f` there is no reply. It returns
+16 data bytes on this machine, contrary to longshot's `Checksum() => ()`. The
+value stayed byte-identical across the whole maintenance cycle and across a
+configuration change, so it covers neither statistics nor settings.
+
+**Alarms take precedence over the machine state** in the status sensor, and at
+least one alarm is almost always pending - which is why a corrected state
+mapping stays invisible in normal operation.
+
 **A reply carries the id of its request.** Unsolicited status frames
 (`0x75`) arrive every few seconds while the machine is awake, so a
 pending request must only be considered answered by a frame with a

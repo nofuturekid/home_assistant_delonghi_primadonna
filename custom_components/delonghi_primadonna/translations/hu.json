@@ -165,7 +165,9 @@
           "preparing": "Előkészítés",
           "delivering_hot_water": "Forró víz adagolása",
           "cleaning_milk_spout": "Tejkifolyó tisztítása",
-          "descaling": "Vízkőtelenítés"
+          "descaling": "Vízkőtelenítés",
+          "delivering_steam": "Delivering Steam",
+          "changing_filter": "Changing Filter"
         }
       },
       "total_coffee": {
