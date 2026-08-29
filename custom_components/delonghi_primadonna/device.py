@@ -53,6 +53,7 @@ class MonitorData:
     status: int
     sub_status: int
     nozzle_state: int
+    percentage: int = 0
 
 
 def parse_monitor_data(data: bytes) -> MonitorData | None:
@@ -68,6 +69,7 @@ def parse_monitor_data(data: bytes) -> MonitorData | None:
     status = 0
     sub_status = 0
     nozzle_state = -1
+    percentage = 0
 
     if answer_id == 0x75:  # MonitorDataV2
         if len(data) < 14:
@@ -92,6 +94,10 @@ def parse_monitor_data(data: bytes) -> MonitorData | None:
 
         # Nozzle State: Byte 4 (from MonitorDataV2.a())
         nozzle_state = data[4]
+
+        # Dispensing progress: byte 11 carries the percentage
+        # (see longshot MonitorV2Response)
+        percentage = data[11]
 
     elif answer_id == 0x70:  # MonitorData (v1)
         if len(data) < 11:
@@ -123,7 +129,9 @@ def parse_monitor_data(data: bytes) -> MonitorData | None:
     else:
         return None
 
-    return MonitorData(switches, alarms, status, sub_status, nozzle_state)
+    return MonitorData(
+        switches, alarms, status, sub_status, nozzle_state, percentage
+    )
 
 
 class BeverageEntityFeature(IntFlag):
@@ -292,6 +300,8 @@ class DelongiPrimadonna:
         self.switches = DeviceSwitches()
         self.active_switches: list[MachineSwitch] = []
         self.sync_time = False
+        self.is_dispensing = False
+        self.dispensing_percentage = 0
         self._lock = asyncio.Lock()
         self._rx_buffer = bytearray()
         self._response_event = None
@@ -570,6 +580,18 @@ class DelongiPrimadonna:
         """Apply parsed monitor data to device state."""
         # Power state
         self.switches.is_on = monitor_data.status > 0
+
+        # Dispensing: milk preparation (10) and hot water (11) are their
+        # own states; 7 covers both idle and dispensing, and the progress
+        # counter is what tells them apart - the same rule longshot uses
+        # for EcamStatus::Busy.
+        self.is_dispensing = (
+            monitor_data.status in (10, 11)
+            or (monitor_data.status == 7 and monitor_data.sub_status != 0)
+        )
+        self.dispensing_percentage = (
+            monitor_data.percentage if self.is_dispensing else 0
+        )
 
         # Nozzle state (only present in v2 / 0x75 packets)
         if monitor_data.nozzle_state != -1:

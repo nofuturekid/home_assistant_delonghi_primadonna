@@ -59,6 +59,9 @@
       }
     },
     "binary_sensor": {
+      "dispensing": {
+          "name": "Bezug läuft"
+      },
       "descaling": {
         "name": "Entkalkung"
       },
