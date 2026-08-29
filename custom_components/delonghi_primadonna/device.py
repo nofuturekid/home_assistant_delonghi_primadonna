@@ -612,18 +612,25 @@ class DelongiPrimadonna:
         NAME_SIZE = 20
         NAME_OFFSET = 1
         NAME_HEADER = 4
-        profile_index = 1
         idx = NAME_HEADER
-        while idx + NAME_SIZE < len(b):
-            profiles.setdefault(
-                profile_index,
-                b[idx:idx + NAME_SIZE]
-                .decode("utf-16-be")
-                .rstrip("\x00")
-                .strip(),
-            )
-            profile_index += 1
+        for profile_index in range(1, self._n_profiles + 1):
+            if idx + NAME_SIZE > len(b):
+                break
+            raw = b[idx:idx + NAME_SIZE]
             idx += NAME_SIZE + NAME_OFFSET
+            # Names are UTF-16-BE and NUL-terminated inside their slot.
+            # Cut at the terminator instead of decoding the padding, which
+            # is what produced the UnicodeDecodeError on the whole reply.
+            end = len(raw)
+            for pos in range(0, len(raw) - 1, 2):
+                if raw[pos] == 0 and raw[pos + 1] == 0:
+                    end = pos
+                    break
+            name = raw[:end].decode("utf-16-be", errors="ignore").strip()
+            if not name:
+                # An empty slot says nothing about the ones after it.
+                continue
+            profiles.setdefault(profile_index, name)
         return profiles
 
     async def power_on(self) -> None:
