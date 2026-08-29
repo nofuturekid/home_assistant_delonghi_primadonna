@@ -109,6 +109,19 @@ MACHINE_STATUS = {
 """
 Command bytes
 """
+# Command type lives in byte 2. Used to name a command in log messages,
+# so a timeout says what failed instead of only dumping its bytes.
+COMMAND_NAMES = {
+    0x75: 'status poll',
+    0x83: 'beverage',
+    0x84: 'power',
+    0x90: 'write setting',
+    0x95: 'read setting',
+    0xA2: 'statistics',
+    0xA4: 'profile names',
+    0xE2: 'clock',
+}
+
 BYTES_POWER = [0x0d, 0x07, 0x84, 0x0f, 0x02, 0x01, 0x55, 0x12]
 
 # Default bitmask for commands
