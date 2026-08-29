@@ -1,0 +1,32 @@
+# Time	b4	b5	b6	b7	b8	b9	b10	Event (reported by user)
+17:12:14	00	04	00	04	00	07	00	idle, descaling alarm pending
+17:14:00	00	04	00	04	00	07	00	START descaling menu (17:14)
+17:15:00	00	04	00	04	00	07	00	waiting for confirmation "filter removed"
+17:15:50	00	14	00	04	00	07	00	WATER TANK REMOVED (bit 0x10)
+17:16:14	00	14	00	04	00	07	00	filling descaler + water
+17:16:50	00	14	00	04	00	07	00	.
+17:17:14	00	14	00	04	00	07	00	.
+17:17:26	00	04	00	04	00	07	00	TANK REINSERTED (0x10 clears)
+17:17:50	00	04	00	04	00	07	00	.
+17:18:14	00	0c	00	04	00	07	00	DRIP TRAY + GROUNDS CONTAINER OUT (bit 0x08)
+17:18:26	00	0c	00	04	00	07	00	.
+17:18:50	00	0c	00	04	00	07	00	.
+17:19:26	00	0c	00	04	00	07	00	.
+17:19:49	00	0c	00	04	00	07	00	.
+17:20:14	00	04	00	04	00	07	00	TRAY REINSERTED (0x08 clears)
+17:20:26	00	04	00	04	08	04	03	*** STATE 7 -> 4 *** b8 00->08, sub_status 00->03
+17:20:38	01	05	00	04	08	04	03	STEAM NOZZLE ATTACHED (b4 00->01, b5 bit 0x01)
+17:20:50	01	05	00	04	08	04	03	.
+17:21:14	01	05	00	04	08	04	03	waiting for final go-ahead
+17:22:50	01	05	00	04	08	04	03	.
+17:23:26	01	05	00	04	08	04	03	.
+17:23:50	01	05	00	04	08	04	03	last frame before start
+17:24:14	01	03	00	04	08	04	04	*** START *** sub_status 03->04, b5 bit 0x04->0x02 (brew group)
+17:24:26	01	03	00	04	08	04	04	pumping through coffee spout
+17:24:50	01	05	00	04	08	04	04	SWITCHED to water/steam nozzle (b5 0x02->0x04)
+17:25:14	01	05	00	04	08	04	04	.
+17:28:26	01	05	00	04	08	04	04	user: "not pumping right now" -> frame IDENTICAL
+17:29:26	01	05	00	04	08	04	04	user: "pumping again"        -> frame IDENTICAL
+17:30:00	01	05	00	04	08	04	04	short individual bursts, nozzle
+17:33:26	01	05	00	04	08	04	04	.
+17:40:26	01	05	00	04	08	04	04	unchanged since 17:24:50
