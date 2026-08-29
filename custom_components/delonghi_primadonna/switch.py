@@ -48,8 +48,21 @@ async def async_setup_entry(
     return True
 
 
+class SettingsBackedSwitch:
+    """Shared refresh for the switches carried by the settings parameter.
+
+    All of them are answered by one read of parameter 0x3f, so the request is
+    issued once here and throttled in the device rather than per entity.
+    """
+
+    async def async_update(self) -> None:
+        """Refresh the settings parameter from the device."""
+        if self.device.connected:
+            await self.device.update_switches()
+
+
 class DelongiPrimadonnaCupLightSwitch(
-    DelonghiDeviceEntity, ToggleEntity, RestoreEntity
+    SettingsBackedSwitch, DelonghiDeviceEntity, ToggleEntity, RestoreEntity
 ):
     """This switch enable/disable the cup light"""
 
@@ -70,11 +83,6 @@ class DelongiPrimadonnaCupLightSwitch(
     def entity_category(self, **kwargs: Any) -> None:
         """Return the category of the entity."""
         return EntityCategory.CONFIG
-
-    async def async_update(self) -> None:
-        """Refresh the settings parameter from the device."""
-        if self.device.connected:
-            self.hass.async_create_task(self.device.update_switches())
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the device on."""
@@ -123,7 +131,7 @@ class DelongiPrimadonnaNotificationSwitch(
 
 
 class DelongiPrimadonnaPowerSaveSwitch(
-    DelonghiDeviceEntity, ToggleEntity, RestoreEntity
+    SettingsBackedSwitch, DelonghiDeviceEntity, ToggleEntity, RestoreEntity
 ):
 
     _attr_icon = 'mdi:lightning-bolt'
@@ -144,11 +152,6 @@ class DelongiPrimadonnaPowerSaveSwitch(
         """Return the category of the entity"""
         return EntityCategory.CONFIG
 
-    async def async_update(self) -> None:
-        """Refresh the settings parameter from the device."""
-        if self.device.connected:
-            self.hass.async_create_task(self.device.update_switches())
-
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the energy save on"""
         self.device.switches.energy_save = True
@@ -161,7 +164,7 @@ class DelongiPrimadonnaPowerSaveSwitch(
 
 
 class DelongiPrimadonnaSoundsSwitch(
-    DelonghiDeviceEntity, ToggleEntity, RestoreEntity
+    SettingsBackedSwitch, DelonghiDeviceEntity, ToggleEntity, RestoreEntity
 ):
 
     _attr_icon = 'mdi:volume-high'
@@ -181,11 +184,6 @@ class DelongiPrimadonnaSoundsSwitch(
     def entity_category(self, **kwargs: Any) -> None:
         """Return the category of the entity."""
         return EntityCategory.CONFIG
-
-    async def async_update(self) -> None:
-        """Refresh the settings parameter from the device."""
-        if self.device.connected:
-            self.hass.async_create_task(self.device.update_switches())
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the sounds on."""
