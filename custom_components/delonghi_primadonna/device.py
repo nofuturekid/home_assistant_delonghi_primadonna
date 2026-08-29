@@ -369,6 +369,7 @@ class DelongiPrimadonna:
         self._profiles_retry_at = 0.0
         self._profiles_retry_delay = PROFILE_RETRY_MIN_INTERVAL
         self._profile_request_start = 1
+        self._profile_request_count = 3
         self._last_time_sync = 0.0
         self.auto_off_level: int | None = None
         self.water_hardness_level: int | None = None
@@ -919,37 +920,29 @@ class DelongiPrimadonna:
         NAME_OFFSET = 1
         NAME_HEADER = 4
         # Names are numbered from the start index of the last range
-        # request (responses carry no index themselves).
+        # request (responses carry no index themselves), and only that
+        # many slots belong to the name area - the packet continues with
+        # unrelated monitor/statistics data.
         first_profile = self._profile_request_start
-        # Characters that can appear in a profile name; anything else marks
-        # the end of the profile area (the packet continues with unrelated
-        # monitor/statistics data and must not be parsed as names).
-        allowed = set(
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "abcdefghijklmnopqrstuvwxyz"
-            "0123456789 ._/-&+'"
-            "\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df"
-        )
-        profile_index = first_profile
         idx = NAME_HEADER
-        while idx + NAME_SIZE < len(b):
-            raw = b[idx:idx + NAME_SIZE]
-            name = (
-                raw.decode("utf-16-be", errors="ignore")
-                .rstrip("\x00")
-                .strip()
-            )
-            cleaned = ""
-            for char in name:
-                if char not in allowed:
-                    break
-                cleaned += char
-            cleaned = cleaned.strip()
-            if not cleaned:
+        for offset in range(self._profile_request_count):
+            if idx + NAME_SIZE > len(b):
                 break
-            profiles.setdefault(profile_index, cleaned)
-            profile_index += 1
+            raw = b[idx:idx + NAME_SIZE]
             idx += NAME_SIZE + NAME_OFFSET
+            # UTF-16-BE in any script, NUL-terminated inside its slot.
+            # Cut at the terminator rather than filtering characters,
+            # which truncated accented names and lost non-Latin ones.
+            end = len(raw)
+            for pos in range(0, len(raw) - 1, 2):
+                if raw[pos] == 0 and raw[pos + 1] == 0:
+                    end = pos
+                    break
+            name = raw[:end].decode("utf-16-be", errors="ignore").strip()
+            if not name:
+                # An empty slot says nothing about the ones after it.
+                continue
+            profiles.setdefault(first_profile + offset, name)
         return profiles
 
     async def power_on(self) -> None:
@@ -1084,6 +1077,7 @@ class DelongiPrimadonna:
             # The response carries no start index; send_command waits
             # for the response, so remembering it here is safe.
             self._profile_request_start = start
+            self._profile_request_count = command[5] - start + 1
             await self.send_command(command, log_timeout=False)
             await asyncio.sleep(0.3)
 
