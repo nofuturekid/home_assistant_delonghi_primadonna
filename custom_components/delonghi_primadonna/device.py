@@ -586,8 +586,6 @@ class DelongiPrimadonna:
                 if (monitor_data.alarms >> i) & 1:
                     self.status = DEVICE_STATUS.get(i, f"Alarm {i}")
                     break
-        elif monitor_data.status in (0, 1, 5):
-            self.status = "Ready"
         else:
             self.status = MACHINE_STATUS.get(
                 monitor_data.status,
