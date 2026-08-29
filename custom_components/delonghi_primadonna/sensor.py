@@ -148,7 +148,7 @@ class DelongiPrimadonnaStatusSensor(
 
     @property
     def icon(self):
-        if self.device.status == "Ready":
+        if self.device.status == 'ready':
             return 'mdi:thumb-up-outline'
         return 'mdi:alert-circle-outline'
 

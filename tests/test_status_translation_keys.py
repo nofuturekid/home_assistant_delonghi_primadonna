@@ -53,9 +53,34 @@ async def test_machine_values_are_translation_keys():
     assert not missing, f"no translation for: {missing}"
 
 
+async def test_no_display_text_left_in_status_comparisons():
+    """Anything comparing against the old text would silently break.
+
+    The status sensor picked its icon with status == "Ready", which stops
+    matching the moment the value becomes a translation key.
+    """
+    import re
+
+    root = os.path.join(
+        os.path.dirname(__file__), "..", "custom_components",
+        "delonghi_primadonna",
+    )
+    offenders = []
+    for name in os.listdir(root):
+        if not name.endswith(".py"):
+            continue
+        with open(os.path.join(root, name), encoding="utf-8") as handle:
+            body = handle.read()
+        if re.search(r"status\s*==\s*[\"']Ready[\"']", body):
+            offenders.append(name)
+
+    assert not offenders, f"still compares against display text: {offenders}"
+
+
 async def run_tests():
     await test_alarm_values_are_translation_keys()
     await test_machine_values_are_translation_keys()
+    await test_no_display_text_left_in_status_comparisons()
     print("[SUCCESS] Status translation keys verified.")
 
 
