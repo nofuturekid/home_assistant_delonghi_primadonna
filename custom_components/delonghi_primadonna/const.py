@@ -95,15 +95,22 @@ MACHINE_STATUS = {
     1: "heating",
     2: "washing",
     3: "heating",
-    4: "heating",
-    5: "ready",  # Old / v1 Ready
+    # Measured on an ECAM 656.55.MS during a full descaling run, 2026-08-22.
+    # 4 is set as soon as the descaling program is armed and stays set while
+    # pumping, so it is the program state rather than "descaling right now".
+    4: "descaling",
+    # 96 s steam dispense with a full progress curve in byte 11. Mapping this
+    # to "ready" made the sensor report an idle machine while steam ran.
+    5: "delivering_steam",
     6: "brewing",
     7: "ready",  # v2 Ready
     8: "rinsing",
     10: "preparing",
     11: "delivering_hot_water",
     12: "cleaning_milk_spout",
-    14: "descaling",
+    # Rinse cycle after confirming a filter change. The machine treats this
+    # as its own program, not a phase of descaling.
+    14: "changing_filter",
 }
 
 """

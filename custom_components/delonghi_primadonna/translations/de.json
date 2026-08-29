@@ -148,6 +148,8 @@
           "rinsing": "Spülen",
           "preparing": "Vorbereitung",
           "delivering_hot_water": "Heißwasserausgabe",
+          "delivering_steam": "Dampfausgabe",
+          "changing_filter": "Filterwechsel",
           "cleaning_milk_spout": "Milchauslauf reinigen",
           "descaling": "Entkalken"
         }
