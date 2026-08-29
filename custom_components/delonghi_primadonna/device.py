@@ -292,6 +292,7 @@ class DelongiPrimadonna:
         self.switches = DeviceSwitches()
         self.active_switches: list[MachineSwitch] = []
         self.sync_time = False
+        self.last_time_sync = 0.0
         self._lock = asyncio.Lock()
         self._rx_buffer = bytearray()
         self._response_event = None
