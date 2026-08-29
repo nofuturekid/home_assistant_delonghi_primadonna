@@ -51,6 +51,9 @@
             "energy_save_mode": {
                 "name": "Energy save mode"
             },
+            "power": {
+                "name": "Power"
+            },
             "sounds": {
                 "name": "Sounds"
             },
