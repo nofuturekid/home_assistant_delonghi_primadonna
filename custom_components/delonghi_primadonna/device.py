@@ -979,6 +979,16 @@ class DelongiPrimadonna:
         await self.send_command(message)
 
     async def send_command(self, message, retries=3) -> bool:
+        """Send a command and report whether a reply arrived.
+
+        Correlation is only exact for statistics (0xA2), which are matched
+        on the requested start address. Every other command still uses the
+        original "first frame after the write wins" rule, so an unrelated
+        monitor frame can satisfy the wait. The return value is therefore
+        only meaningful for 0xA2; ``get_statistics`` is its sole consumer.
+        Do not treat True as an acknowledgement for other commands without
+        adding per-answer-id correlation first (see PR #255).
+        """
         async with self._lock:
             message_to_send = copy.deepcopy(message)
             for attempt in range(retries):
@@ -1117,9 +1127,10 @@ class DelongiPrimadonna:
                 return
             await asyncio.sleep(0.3)
 
-            # Extended maintenance counters (110-119, includes 111 =
-            # milk cleaning). Kept at 110 as on master: the PR moved it to
-            # 111 without explanation and no entity reads 120.
+            # Extended maintenance counters. Kept at 110 as on master:
+            # 110-119 covers 111, the milk cleaning counter that
+            # sensor.py actually reads. The PR moved the start to 111
+            # without explanation, which drops 110 and gains nothing.
             if not await self.get_statistics(110, 10):
                 return
             await asyncio.sleep(0.3)

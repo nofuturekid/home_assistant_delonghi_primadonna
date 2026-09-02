@@ -152,6 +152,8 @@
           "rinsing": "Öblítés",
           "preparing": "Előkészítés",
           "delivering_hot_water": "Forró víz adagolása",
+          "delivering_steam": "Gőz adagolása",
+          "changing_filter": "Szűrőcsere",
           "cleaning_milk_spout": "Tejkifolyó tisztítása",
           "descaling": "Vízkőtelenítés"
         }

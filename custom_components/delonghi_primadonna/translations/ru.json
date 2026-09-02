@@ -152,6 +152,8 @@
           "rinsing": "Ополаскивание",
           "preparing": "Подготовка",
           "delivering_hot_water": "Подача горячей воды",
+          "delivering_steam": "Подача пара",
+          "changing_filter": "Замена фильтра",
           "cleaning_milk_spout": "Очистка насадки для молока",
           "descaling": "Очистка от накипи"
         }
