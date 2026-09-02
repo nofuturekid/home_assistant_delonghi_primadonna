@@ -31,14 +31,15 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     BYTES_WATER_TEMPERATURE_COMMAND, COFFE_OFF, COFFE_ON,
                     COFFEE_GROUNDS_CONTAINER_CLEAN,
                     COFFEE_GROUNDS_CONTAINER_DETACHED,
-                    COFFEE_GROUNDS_CONTAINER_FULL, CONTROLL_CHARACTERISTIC,
-                    DEBUG, DEFAULT_DEVICE_NAME, DEFAULT_IMAGE_URL,
-                    DEVICE_READY, DEVICE_STATUS, DEVICE_TURNOFF, DOMAIN,
-                    DOPPIO_OFF, DOPPIO_ON, ESPRESSO2_OFF, ESPRESSO2_ON,
-                    ESPRESSO_OFF, ESPRESSO_ON, HOTWATER_OFF, HOTWATER_ON,
-                    LONG_OFF, LONG_ON, MACHINE_STATUS, NAME_CHARACTERISTIC,
-                    NOZZLE_STATE, PARAM_SWITCHES, START_COFFEE, STEAM_OFF,
-                    STEAM_ON, SWITCH_BIT_CUP_LIGHT, SWITCH_BIT_ENERGY_SAVE,
+                    COFFEE_GROUNDS_CONTAINER_FULL, COMMAND_NAMES,
+                    CONTROLL_CHARACTERISTIC, DEBUG, DEFAULT_DEVICE_NAME,
+                    DEFAULT_IMAGE_URL, DEVICE_READY, DEVICE_STATUS,
+                    DEVICE_TURNOFF, DOMAIN, DOPPIO_OFF, DOPPIO_ON,
+                    ESPRESSO2_OFF, ESPRESSO2_ON, ESPRESSO_OFF, ESPRESSO_ON,
+                    HOTWATER_OFF, HOTWATER_ON, LONG_OFF, LONG_ON,
+                    MACHINE_STATUS, NAME_CHARACTERISTIC, NOZZLE_STATE,
+                    PARAM_SWITCHES, START_COFFEE, STEAM_OFF, STEAM_ON,
+                    SWITCH_BIT_CUP_LIGHT, SWITCH_BIT_ENERGY_SAVE,
                     SWITCH_BIT_SOUNDS, WATER_SHORTAGE, WATER_TANK_DETACHED)
 from .machine_switch import MachineSwitch, parse_switches
 from .model import get_machine_model
@@ -57,6 +58,13 @@ class MonitorData:
     sub_status: int
     nozzle_state: int
     percentage: int = 0
+
+
+def describe_command(message) -> str:
+    """Name a command for log messages, falling back to its type byte."""
+    if len(message) < 3:
+        return 'unknown'
+    return COMMAND_NAMES.get(message[2], f'0x{message[2]:02x}')
 
 
 def parse_monitor_data(data: bytes) -> MonitorData | None:
@@ -1010,7 +1018,9 @@ class DelongiPrimadonna:
                             response_received = True
                         except asyncio.TimeoutError:
                             _LOGGER.warning(
-                                'Timeout waiting for response to command: %s',
+                                'Timeout waiting for a reply to the %s '
+                                'command: %s',
+                                describe_command(message_to_send),
                                 hexlify(bytearray(message_to_send), " ")
                             )
                     finally:
