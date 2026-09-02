@@ -23,9 +23,9 @@ from homeassistant.core import HomeAssistant
 
 from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     BASE_COMMAND, BEVERAGE_NONE, BYTES_AUTOPOWEROFF_COMMAND,
-                    BYTES_LOAD_PROFILES, BYTES_POWER, BYTES_STATISTICS_COMMAND,
-                    BYTES_SWITCH_COMMAND, BYTES_TIME_COMMAND,
-                    BYTES_WATER_HARDNESS_COMMAND,
+                    BYTES_LOAD_PROFILES, BYTES_LOAD_SWITCHES, BYTES_POWER,
+                    BYTES_STATISTICS_COMMAND, BYTES_SWITCH_COMMAND,
+                    BYTES_TIME_COMMAND, BYTES_WATER_HARDNESS_COMMAND,
                     BYTES_WATER_TEMPERATURE_COMMAND, COFFE_OFF, COFFE_ON,
                     COFFEE_GROUNDS_CONTAINER_CLEAN,
                     COFFEE_GROUNDS_CONTAINER_DETACHED,
@@ -35,8 +35,9 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     DOPPIO_OFF, DOPPIO_ON, ESPRESSO2_OFF, ESPRESSO2_ON,
                     ESPRESSO_OFF, ESPRESSO_ON, HOTWATER_OFF, HOTWATER_ON,
                     LONG_OFF, LONG_ON, MACHINE_STATUS, NAME_CHARACTERISTIC,
-                    NOZZLE_STATE, START_COFFEE, STEAM_OFF, STEAM_ON,
-                    WATER_SHORTAGE, WATER_TANK_DETACHED)
+                    NOZZLE_STATE, PARAM_SWITCHES, START_COFFEE, STEAM_OFF,
+                    STEAM_ON, SWITCH_BIT_CUP_LIGHT, SWITCH_BIT_ENERGY_SAVE,
+                    SWITCH_BIT_SOUNDS, WATER_SHORTAGE, WATER_TANK_DETACHED)
 from .machine_switch import MachineSwitch, parse_switches
 from .model import get_machine_model
 
@@ -299,6 +300,8 @@ class DelongiPrimadonna:
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
         self._stats_lock = asyncio.Lock()
+        self._switches_raw: int | None = None
+        self._last_switches_request = 0.0
         machine = get_machine_model(self.product_code)
         self.model = (
             machine.name if machine and machine.name else 'Prima Donna'
@@ -433,14 +436,54 @@ class DelongiPrimadonna:
         raise last_error
 
     def _make_switch_command(self):
-        """Make hex command"""
-        base_command = list(BASE_COMMAND)
-        base_command[3] = '1' if self.switches.energy_save else '0'
-        base_command[4] = '1' if self.switches.cup_light else '0'
-        base_command[5] = '1' if self.switches.sounds else '0'
+        """Make hex command.
+
+        Uses the last settings byte read from the device as base so
+        that bits not managed by this integration (e.g. the cup warmer
+        on some models) are preserved instead of being overwritten.
+        """
+        base = (
+            self._switches_raw
+            if self._switches_raw is not None
+            else int(BASE_COMMAND, 2)
+        )
+        for bit, enabled in (
+            (SWITCH_BIT_ENERGY_SAVE, self.switches.energy_save),
+            (SWITCH_BIT_CUP_LIGHT, self.switches.cup_light),
+            (SWITCH_BIT_SOUNDS, self.switches.sounds),
+        ):
+            base = base | bit if enabled else base & ~bit
+        self._switches_raw = base
         hex_command = BYTES_SWITCH_COMMAND.copy()
-        hex_command[9] = int(''.join(base_command), 2)
+        hex_command[9] = base
         return hex_command
+
+    def _handle_parameter_data(self, value: bytes) -> None:
+        """Handle a parameter read response (0x95).
+
+        Layout: d0 <len> 95 0f <param_hi> <param_lo> <b3> <b2> <b1> <b0>
+        <crc16>. Parameter 0x3f carries the settings bitmask; its low
+        byte mirrors what BYTES_SWITCH_COMMAND writes.
+        """
+        if len(value) < 12:
+            return
+        param = (value[4] << 8) | value[5]
+        if param != PARAM_SWITCHES:
+            return
+        raw = value[9]
+        self._switches_raw = raw
+        self.switches.cup_light = bool(raw & SWITCH_BIT_CUP_LIGHT)
+        self.switches.sounds = bool(raw & SWITCH_BIT_SOUNDS)
+        self.switches.energy_save = bool(raw & SWITCH_BIT_ENERGY_SAVE)
+        _LOGGER.debug('Settings parameter 0x3f = 0x%02x', raw)
+
+    async def update_switches(self) -> None:
+        """Request the settings parameter with throttling."""
+        current_time = time.monotonic()
+        if current_time - self._last_switches_request < 30:
+            return
+        self._last_switches_request = current_time
+        await self.send_command(BYTES_LOAD_SWITCHES.copy())
 
     async def _event_trigger(self, value):
         """
@@ -551,6 +594,8 @@ class DelongiPrimadonna:
                 self.active_profile_id = profile_id
         elif answer_id == 0xA2:
             await self._parse_statistics(value)
+        elif answer_id == 0x95:
+            self._handle_parameter_data(value)
 
         hex_value = hexlify(value, ' ')
 
