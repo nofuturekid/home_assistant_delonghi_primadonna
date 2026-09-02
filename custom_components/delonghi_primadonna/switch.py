@@ -1,6 +1,7 @@
 """Switch entities for Delonghi Primadonna."""
 
 import datetime
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -199,28 +200,49 @@ class DelongiPrimadonnaSoundsSwitch(
 class DelongiPrimadonnaTimeSyncSwitch(
         DelonghiDeviceEntity, ToggleEntity, RestoreEntity
 ):
-    _attr_is_on = False
+    """Keep the machine clock in step with Home Assistant.
+
+    While on, the clock is set right away and then re-synced once a day.
+    """
+
     _attr_icon = 'mdi:clock-time-eight-outline'
     _attr_translation_key = 'time_sync'
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         if (last_state := await self.async_get_last_state()) is not None:
-            self._attr_is_on = last_state.state == 'on'
+            self.device.sync_time = last_state.state == 'on'
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether time synchronization is enabled."""
+        return self.device.sync_time
 
     @property
     def entity_category(self, **kwargs: Any) -> None:
         """Return the category of the entity."""
         return EntityCategory.CONFIG
 
-    def turn_on(self, **kwargs: Any) -> None:
-        """Turn the sounds on."""
+    async def async_update(self) -> None:
+        """Re-sync the clock once a day while enabled."""
+        if not self.device.sync_time:
+            return
+        now = time.monotonic()
+        if now - self.device.last_time_sync < 24 * 3600:
+            return
+        self.device.last_time_sync = now
         self.hass.async_create_task(
             self.device.set_time(datetime.datetime.now())
         )
-        self._attr_is_on = True
 
-    def turn_off(self, **kwargs: Any) -> None:
-        """Turn the sounds off."""
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable time sync and set the clock right away."""
+        self.device.sync_time = True
+        self.device.last_time_sync = time.monotonic()
+        self.hass.async_create_task(
+            self.device.set_time(datetime.datetime.now())
+        )
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable time synchronization."""
         self.device.sync_time = False
-        self._attr_is_on = False

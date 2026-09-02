@@ -304,6 +304,7 @@ class DelongiPrimadonna:
         self.sync_time = False
         self.is_dispensing = False
         self.dispensing_percentage = 0
+        self.last_time_sync = 0.0
         self._lock = asyncio.Lock()
         self._rx_buffer = bytearray()
         self._response_event = None
