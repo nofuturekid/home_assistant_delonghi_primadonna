@@ -148,6 +148,8 @@
                     "rinsing": "Rinsing",
                     "preparing": "Preparing",
                     "delivering_hot_water": "Delivering Hot Water",
+                    "delivering_steam": "Delivering Steam",
+                    "changing_filter": "Changing Filter",
                     "cleaning_milk_spout": "Cleaning Milk Spout",
                     "descaling": "Descaling"
                 }
