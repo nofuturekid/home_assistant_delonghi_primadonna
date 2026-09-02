@@ -298,7 +298,7 @@ class DelongiPrimadonna:
         self.notify = False
         self.steam_nozzle = NOZZLE_STATE[-1]
         self.service = 0
-        self.status = "Ready"
+        self.status = 'ready'
         self.switches = DeviceSwitches()
         self.active_switches: list[MachineSwitch] = []
         self.sync_time = False
@@ -758,7 +758,7 @@ class DelongiPrimadonna:
         if monitor_data.alarms > 0:
             for i in range(32):
                 if (monitor_data.alarms >> i) & 1:
-                    self.status = DEVICE_STATUS.get(i, f"Alarm {i}")
+                    self.status = DEVICE_STATUS.get(i, 'unknown_alarm')
                     break
         else:
             self.status = MACHINE_STATUS.get(
