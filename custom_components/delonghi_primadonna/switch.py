@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .base_entity import DelonghiDeviceEntity
-from .const import DOMAIN
+from .const import DOMAIN, STANDBY_VERIFIED_PRODUCT_CODES
 from .device import DelongiPrimadonna
 from .model import get_machine_model
 
@@ -32,6 +32,11 @@ async def async_setup_entry(
         DelongiPrimadonnaPowerSaveSwitch(delongh_device, hass),
         DelongiPrimadonnaSoundsSwitch(delongh_device, hass),
     ]
+
+    if delongh_device.product_code in STANDBY_VERIFIED_PRODUCT_CODES:
+        switches.append(
+            DelongiPrimadonnaPowerSwitch(delongh_device, hass),
+        )
 
     if model and model.cup_light_settings:
         switches.insert(
@@ -246,3 +251,28 @@ class DelongiPrimadonnaTimeSyncSwitch(
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable time synchronization."""
         self.device.sync_time = False
+
+
+class DelongiPrimadonnaPowerSwitch(DelonghiDeviceEntity, ToggleEntity):
+    """Turn the machine on, or put it into standby.
+
+    Only offered on the models listed in STANDBY_VERIFIED_PRODUCT_CODES.
+    The state follows the machine status from the monitor packets, so it
+    also reflects use of the physical power button.
+    """
+
+    _attr_icon = 'mdi:power'
+    _attr_translation_key = 'power'
+
+    @property
+    def is_on(self) -> bool:
+        """Return True while the machine is not in standby."""
+        return self.device.switches.is_on
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the machine on."""
+        self.hass.async_create_task(self.device.power_on())
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Put the machine into standby."""
+        self.hass.async_create_task(self.device.power_off())

@@ -121,6 +121,16 @@ Command bytes
 """
 BYTES_POWER = [0x0d, 0x07, 0x84, 0x0f, 0x02, 0x01, 0x55, 0x12]
 
+# AppControl (0x84) with (1, 1) puts the machine into standby. This is not
+# part of the observed app traffic; it was found by probing and confirmed on
+# the machines listed below. The switch is only offered for those, because
+# what (1, 1) does on an untested model is unknown.
+BYTES_POWER_OFF = [0x0d, 0x07, 0x84, 0x0f, 0x01, 0x01, 0x00, 0x00]
+
+# Product codes on which standby has actually been exercised.
+# PrimaDonna ELITE 656.55 ships under two codes; both are the same machine.
+STANDBY_VERIFIED_PRODUCT_CODES = ('0132217031', '0132217027')
+
 # Default bitmask for commands
 BASE_COMMAND = '10000001'
 
