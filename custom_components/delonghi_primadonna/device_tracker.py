@@ -1,5 +1,7 @@
 """Device tracker entity for Delonghi Primadonna."""
 
+import asyncio
+
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -25,6 +27,7 @@ async def async_setup_entry(
 class DelongiPrimadonnaDeviceTracker(DelonghiDeviceEntity, ScannerEntity):
     """Implementation of a Delonghi Primadonna device tracker"""
     _attr_name = None
+    _device_name_task: asyncio.Task | None = None
 
     @property
     def icon(self) -> str:
@@ -56,5 +59,24 @@ class DelongiPrimadonnaDeviceTracker(DelonghiDeviceEntity, ScannerEntity):
         return self.device.connected
 
     async def async_update(self):
-        """Updates the device status"""
-        self.hass.async_create_task(self.device.get_device_name())
+        """Update the device status."""
+        task = self._device_name_task
+        if task is None or task.done():
+            self._device_name_task = self.hass.async_create_background_task(
+                self.device.get_device_name(),
+                "delonghi device tracker update",
+            )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel the pending device status update."""
+        task = self._device_name_task
+        self._device_name_task = None
+
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        await super().async_will_remove_from_hass()
