@@ -26,6 +26,7 @@ async def async_setup_entry(
             DelongiPrimadonnaDescaleSensor(delongh_device, hass),
             DelongiPrimadonnaFilterSensor(delongh_device, hass),
             DelongiPrimadonnaEnabledSensor(delongh_device, hass),
+            DelongiPrimadonnaDispensingSensor(delongh_device, hass),
         ]
     )
     return True
@@ -125,3 +126,23 @@ class DelongiPrimadonnaFilterSensor(
         if self.is_on:
             result = 'mdi:filter-off'
         return result
+
+
+class DelongiPrimadonnaDispensingSensor(
+    DelonghiDeviceEntity, BinarySensorEntity
+):
+    """On while the machine is dispensing a beverage."""
+
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_translation_key = 'dispensing'
+    _attr_icon = 'mdi:coffee-to-go'
+
+    @property
+    def is_on(self) -> bool:
+        """Return True while a beverage is being dispensed."""
+        return self.device.is_dispensing
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose the dispensing progress percentage."""
+        return {'percentage': self.device.dispensing_percentage}
