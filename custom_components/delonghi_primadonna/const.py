@@ -141,9 +141,46 @@ BYTES_POWER = [0x0d, 0x07, 0x84, 0x0f, 0x02, 0x01, 0x55, 0x12]
 # what (1, 1) does on an untested model is unknown.
 BYTES_POWER_OFF = [0x0d, 0x07, 0x84, 0x0f, 0x01, 0x01, 0x00, 0x00]
 
-# Product codes on which standby has actually been exercised.
-# PrimaDonna ELITE 656.55 ships under two codes; both are the same machine.
-STANDBY_VERIFIED_PRODUCT_CODES = ('0132217031', '0132217027')
+# Machine families with at least one owner report of the standby command
+# working, from issue #222 where it was found. Each family rests on a
+# single such report - not every code below has been confirmed
+# individually. Sibling codes ride along only when MachinesModels.json
+# gives them the same `type` as the reported machine, which is the
+# catalog's own machine identifier; the display `name` is not enough,
+# since several distinct machines share one name.
+#
+# Standby is not universal: Dinamica PLUS 370.95 was reported in the same
+# thread as not responding to it. Hence an allow list, not a feature flag.
+STANDBY_VERIFIED_PRODUCT_CODES = (
+    # PrimaDonna ELITE 656.55 - these two came with the original switch in
+    # #253, whose author verified them. Their types do differ (ECAM 656.55
+    # protocol 2 and ECAM 656.55.MS protocol 1), so they are grandfathered
+    # on that author's report rather than by the type rule above.
+    '0132217031', '0132217027',
+    # PrimaDonna S 510.55 - reported by the author of #222. These five all
+    # carry type ECAM 510.55.M. A sixth entry, '0132215355', shares the
+    # display name but its type is ECAM516.45.MB, a different machine, so
+    # it is deliberately left out.
+    '0132215311', '0132215322', '0132215329',
+    '0132215331', '0132215339',
+    # PrimaDonna ELITE 650.85 - confirmed in #222 for an ECAM650.85.MS.
+    # MachinesModels.json also carries a '650.85.MS' entry under product
+    # code '71234567', which is plainly a placeholder rather than a real
+    # SKU, so it is left out until someone reports picking it and the
+    # switch working.
+    '0132219009', '0132219012', '0132219017', '0132219019',
+    # Maestosa / EPAM960.75.GLM - confirmed in #222. Eight entries carry a
+    # Maestosa name and the name field alone cannot tell them apart; the
+    # machine identity is only in each entry's image_url. Seven of the
+    # eight are EPAM960.75.GLM / MAESTOSA_BEST and these six are those,
+    # minus '0132268004' - which is the same machine identity but listed
+    # separately as MAESTOSA CN for the Chinese market, and is left out
+    # only because no report has come from that variant. The eighth,
+    # '0132267000' (MAESTOSA_GOOD), is an EPAM960.55.GM: a genuinely
+    # different machine that nobody has reported standby on.
+    '0132268000', '0132230018', 'J013200730',
+    '0132268001', '0132268002', '0132268003',
+)
 
 # Default bitmask for commands
 BASE_COMMAND = '10000001'
