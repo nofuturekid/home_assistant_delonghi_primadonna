@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -17,7 +18,8 @@ sys.path.append(
 
 import delonghi_primadonna.device as device_module  # noqa: E402
 from delonghi_primadonna.const import BYTES_STATISTICS_COMMAND  # noqa: E402
-from delonghi_primadonna.device import DelongiPrimadonna  # noqa: E402
+from delonghi_primadonna.device import (DelongiPrimadonna,  # noqa: E402
+                                        DeviceNotVisible)
 from delonghi_primadonna.device_tracker import \
     DelongiPrimadonnaDeviceTracker  # noqa: E402
 
@@ -26,6 +28,15 @@ CONFIG = {
     "model": "TEST",
     "name": "TEST",
 }
+
+
+class _CollectingHandler(logging.Handler):
+    def __init__(self, sink):
+        super().__init__(level=logging.DEBUG)
+        self._sink = sink
+
+    def emit(self, record):
+        self._sink.append(record)
 
 
 def make_device(hass=None):
@@ -565,7 +576,102 @@ async def test_statistics_schedule_respects_throttle():
     assert hass.created_tasks == []
 
 
+async def test_missing_device_raises_device_not_visible():
+    """A machine no adapter can see is an expected state, not a fault."""
+    device = make_device()
+    original_lookup = device_module.bluetooth.async_ble_device_from_address
+    device_module.bluetooth.async_ble_device_from_address = (
+        lambda hass, mac, connectable: None
+    )
+    try:
+        raised = None
+        try:
+            await device._connect()
+        except BleakError as error:
+            raised = error
+    finally:
+        device_module.bluetooth.async_ble_device_from_address = (
+            original_lookup
+        )
+
+    assert isinstance(raised, DeviceNotVisible), (
+        "a machine that is switched off must be distinguishable from a "
+        "machine that refuses to connect"
+    )
+    assert isinstance(raised, BleakError), (
+        "DeviceNotVisible must stay a BleakError so existing handlers "
+        "keep working"
+    )
+
+
+async def test_switched_off_machine_logs_no_warning():
+    """The common case - appliance off - must not spam WARNING."""
+    device = make_device()
+    original_lookup = device_module.bluetooth.async_ble_device_from_address
+    device_module.bluetooth.async_ble_device_from_address = (
+        lambda hass, mac, connectable: None
+    )
+    records = []
+    handler = _CollectingHandler(records)
+    device_module._LOGGER.addHandler(handler)
+    device_module._LOGGER.setLevel(logging.DEBUG)
+    try:
+        try:
+            await device._connect()
+        except BleakError:
+            pass
+    finally:
+        device_module._LOGGER.removeHandler(handler)
+        device_module.bluetooth.async_ble_device_from_address = (
+            original_lookup
+        )
+
+    warnings = [r for r in records if r.levelno >= logging.WARNING]
+    assert not warnings, (
+        "an unreachable machine produced WARNING lines: "
+        f"{[r.getMessage() for r in warnings]}"
+    )
+    assert records, "the event should still be visible at DEBUG"
+
+
+async def test_refusing_machine_still_warns():
+    """A machine in range that will not connect is still a real fault."""
+    device = make_device()
+    original_lookup = device_module.bluetooth.async_ble_device_from_address
+    original_establish = device_module.establish_connection
+    device_module.bluetooth.async_ble_device_from_address = (
+        lambda hass, mac, connectable: object()
+    )
+
+    async def refuse(*args, **kwargs):
+        raise BleakError("device refused the connection")
+
+    device_module.establish_connection = refuse
+    records = []
+    handler = _CollectingHandler(records)
+    device_module._LOGGER.addHandler(handler)
+    device_module._LOGGER.setLevel(logging.DEBUG)
+    try:
+        try:
+            await device._connect()
+        except BleakError:
+            pass
+    finally:
+        device_module._LOGGER.removeHandler(handler)
+        device_module.bluetooth.async_ble_device_from_address = (
+            original_lookup
+        )
+        device_module.establish_connection = original_establish
+
+    warnings = [r for r in records if r.levelno >= logging.WARNING]
+    assert warnings, "a machine that refuses to connect must still warn"
+
+
 async def run_tests():
+    await test_missing_device_raises_device_not_visible()
+    await test_switched_off_machine_logs_no_warning()
+    await test_refusing_machine_still_warns()
+
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
     await test_receive_buffer_reassembles_fragmented_packet()
