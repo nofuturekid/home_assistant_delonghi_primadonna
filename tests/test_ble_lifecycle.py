@@ -613,6 +613,7 @@ async def test_switched_off_machine_logs_no_warning():
     )
     records = []
     handler = _CollectingHandler(records)
+    previous_level = device_module._LOGGER.level
     device_module._LOGGER.addHandler(handler)
     device_module._LOGGER.setLevel(logging.DEBUG)
     try:
@@ -622,6 +623,7 @@ async def test_switched_off_machine_logs_no_warning():
             pass
     finally:
         device_module._LOGGER.removeHandler(handler)
+        device_module._LOGGER.setLevel(previous_level)
         device_module.bluetooth.async_ble_device_from_address = (
             original_lookup
         )
@@ -649,6 +651,7 @@ async def test_refusing_machine_still_warns():
     device_module.establish_connection = refuse
     records = []
     handler = _CollectingHandler(records)
+    previous_level = device_module._LOGGER.level
     device_module._LOGGER.addHandler(handler)
     device_module._LOGGER.setLevel(logging.DEBUG)
     try:
@@ -658,6 +661,7 @@ async def test_refusing_machine_still_warns():
             pass
     finally:
         device_module._LOGGER.removeHandler(handler)
+        device_module._LOGGER.setLevel(previous_level)
         device_module.bluetooth.async_ble_device_from_address = (
             original_lookup
         )
