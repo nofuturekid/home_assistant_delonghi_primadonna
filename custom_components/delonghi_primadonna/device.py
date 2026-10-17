@@ -41,9 +41,9 @@ from .const import (AMERICANO_OFF, AMERICANO_ON, AVAILABLE_PROFILES,
                     PARAM_AUTO_OFF, PARAM_SWITCHES, PARAM_WATER_HARDNESS,
                     PARAM_WATER_TEMPERATURE, PROFILE_RETRY_MAX_INTERVAL,
                     PROFILE_RETRY_MIN_INTERVAL, READABLE_PARAMETERS,
-                    START_COFFEE, STEAM_OFF, STEAM_ON, SWITCH_BIT_CUP_LIGHT,
-                    SWITCH_BIT_ENERGY_SAVE, SWITCH_BIT_SOUNDS, WATER_SHORTAGE,
-                    WATER_TANK_DETACHED)
+                    REPLY_TIMEOUT, REPLY_TIMEOUTS, START_COFFEE, STEAM_OFF,
+                    STEAM_ON, SWITCH_BIT_CUP_LIGHT, SWITCH_BIT_ENERGY_SAVE,
+                    SWITCH_BIT_SOUNDS, WATER_SHORTAGE, WATER_TANK_DETACHED)
 from .machine_switch import MachineSwitch, parse_switches
 from .model import get_machine_model
 
@@ -1196,7 +1196,9 @@ class DelongiPrimadonna:
                         try:
                             await asyncio.wait_for(
                                 self._response_event.wait(),
-                                timeout=10,
+                                timeout=REPLY_TIMEOUTS.get(
+                                    message_to_send[2], REPLY_TIMEOUT
+                                ),
                             )
                             response_received = True
                         except asyncio.TimeoutError:

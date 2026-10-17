@@ -519,6 +519,49 @@ async def test_clock_command_waits_for_its_reply():
     assert result is True
 
 
+async def test_lost_settings_reply_does_not_hold_the_lock_for_10s():
+    """A lost 0x95 reply must not block the device for the full timeout.
+
+    The settings poll reads four parameters every 30 s in the background,
+    and the next poll asks again. Measured replies arrive within ~150 ms,
+    but now and then one never comes (seen for 0x3e on 2026-10-17); a 10 s
+    wait then holds the device lock and delays any user command queued
+    behind it. Other commands keep the long timeout.
+    """
+    device = make_device()
+    device._client = FakeClient()
+    device._connect = fake_connect
+    timeouts = {}
+
+    original_wait_for = device_module.asyncio.wait_for
+
+    async def record_timeout(awaitable, timeout):
+        close = getattr(awaitable, "close", None)
+        if close is not None:
+            close()
+        timeouts[current[0]] = timeout
+        raise asyncio.TimeoutError
+
+    current = [None]
+    device_module.asyncio.wait_for = record_timeout
+    try:
+        current[0] = 0x95
+        await device.send_command(
+            [0x0D, 0x08, 0x95, 0x0F, 0x00, 0x3E, 0x01, 0x00, 0x00],
+            retries=1,
+        )
+        current[0] = 0xA9
+        await device.send_command(
+            [0x0D, 0x06, 0xA9, 0xF0, 0x01, 0x00, 0x00],
+            retries=1,
+        )
+    finally:
+        device_module.asyncio.wait_for = original_wait_for
+
+    assert timeouts[0x95] <= 2, timeouts
+    assert timeouts[0xA9] == 10, timeouts
+
+
 async def run_tests():
     await test_matching_statistics_response()
     await test_wrong_statistics_start_is_ignored()
@@ -532,6 +575,7 @@ async def run_tests():
     await test_matching_answer_id_releases_waiter()
     await test_power_command_does_not_wait_for_a_reply()
     await test_clock_command_waits_for_its_reply()
+    await test_lost_settings_reply_does_not_hold_the_lock_for_10s()
     await test_matching_statistics_command_returns_true()
     await test_matching_sparse_statistics_command_returns_true()
     await test_non_statistics_command_returns_true()

@@ -131,6 +131,13 @@ Command bytes
 # answered (d0 06 e2 f0 ..., captured 2026-09-04) and must not be listed.
 COMMANDS_WITHOUT_RESPONSE = frozenset({0x84})
 
+# Seconds to wait for a reply. Settings reads (0x95) are answered within
+# ~150 ms when they are answered at all; a lost reply is retried by the
+# next 30 s poll anyway, so holding the device lock for the default 10 s
+# only delays whatever command is queued behind it.
+REPLY_TIMEOUT = 10
+REPLY_TIMEOUTS = {0x95: 2}
+
 # Command type lives in byte 2. Used to name a command in log messages,
 # so a timeout says what failed instead of only dumping its bytes.
 COMMAND_NAMES = {
