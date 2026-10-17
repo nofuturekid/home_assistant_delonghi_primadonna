@@ -866,12 +866,15 @@ class DelongiPrimadonna:
         """Apply parsed monitor data to device state."""
         self._note_power_state(monitor_data.status > 0)
 
-        # Dispensing: milk preparation (10) and hot water (11) are their
-        # own states; 7 covers both idle and dispensing, and the progress
-        # counter is what tells them apart - the same rule longshot uses
-        # for EcamStatus::Busy.
+        # Dispensing: steam (5), milk preparation (10) and hot water (11)
+        # are their own states; 7 covers both idle and dispensing, and the
+        # progress counter is what tells them apart - the same rule longshot
+        # uses for EcamStatus::Busy. State 5 was measured 2026-08-22: a 96 s
+        # steam dispense reported 5 throughout, never 7. Maintenance programs
+        # (descaling 4, milk cleaning 12, filter change 14) also report
+        # progress but are deliberately not counted as dispensing.
         self.is_dispensing = (
-            monitor_data.status in (10, 11)
+            monitor_data.status in (5, 10, 11)
             or (monitor_data.status == 7 and monitor_data.sub_status != 0)
         )
         self.dispensing_percentage = (
