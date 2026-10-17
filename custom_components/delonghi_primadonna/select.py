@@ -79,8 +79,14 @@ class ProfileSelect(DelonghiDeviceEntity, SelectEntity, RestoreEntity):
         """Change the selected option."""
         profile_id = self.device.profile_id(option)
         _LOGGER.debug("Select profile '%s' id=%s", option, profile_id)
-        self.hass.async_create_task(self.device.select_profile(profile_id))
+        task = self.hass.async_create_task(
+            self.device.select_profile(profile_id)
+        )
         self._attr_current_option = option
+        # current_option follows the profile the machine confirms (0xA9
+        # reply), which arrives after this method returns; write the
+        # state then instead of waiting for the next poll.
+        task.add_done_callback(lambda _task: self.async_write_ha_state())
 
 
 class BeverageSelect(DelonghiDeviceEntity, SelectEntity, RestoreEntity):
