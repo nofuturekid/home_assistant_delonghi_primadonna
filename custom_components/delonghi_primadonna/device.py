@@ -1145,13 +1145,10 @@ class DelongiPrimadonna:
     ) -> bool:
         """Send a command and report whether a reply arrived.
 
-        Correlation is only exact for statistics (0xA2), which are matched
-        on the requested start address. Every other command still uses the
-        original "first frame after the write wins" rule, so an unrelated
-        monitor frame can satisfy the wait. The return value is therefore
-        only meaningful for 0xA2; ``get_statistics`` is its sole consumer.
-        Do not treat True as an acknowledgement for other commands without
-        adding per-answer-id correlation first (see PR #255).
+        A reply is the first frame carrying the request's id (byte 2);
+        statistics (0xA2) must also match the requested start address.
+        Commands in COMMANDS_WITHOUT_RESPONSE are not waited for and
+        return True once written.
         """
         async with self._lock:
             message_to_send = copy.deepcopy(message)

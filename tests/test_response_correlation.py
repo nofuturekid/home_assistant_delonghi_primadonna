@@ -484,6 +484,41 @@ async def test_power_command_does_not_wait_for_a_reply():
     assert device._response_event is None
 
 
+async def test_clock_command_waits_for_its_reply():
+    """The clock command (0xE2) is answered, so its reply must be awaited.
+
+    Measured 2026-09-04 on an ECAM 656.55.MS: `0d 07 e2 f0 ...` was answered
+    139 ms later by `d0 06 e2 f0 00 3c 25`. Listing 0xE2 as unanswered (as
+    the fork once did, from a documentation table, not a capture) returns
+    before the reply arrives and leaves it to be taken for something else.
+    """
+    device = make_device()
+    reply = unhexlify("d006e2f0003c25")
+    armed = []
+
+    class ClockClient(RespondingFakeClient):
+        async def write_gatt_char(self, characteristic, message):
+            armed.append(
+                (
+                    device._response_event is not None,
+                    device._expected_answer_id,
+                )
+            )
+            await super().write_gatt_char(characteristic, message)
+
+    device._client = ClockClient(device, reply)
+    device._connect = fake_connect
+    device._event_trigger = no_event
+
+    result = await device.send_command(
+        [0x0D, 0x07, 0xE2, 0xF0, 0x0E, 0x2B, 0x00, 0x00],
+        retries=1,
+    )
+
+    assert armed == [(True, 0xE2)], armed
+    assert result is True
+
+
 async def run_tests():
     await test_matching_statistics_response()
     await test_wrong_statistics_start_is_ignored()
@@ -496,6 +531,7 @@ async def run_tests():
     await test_foreign_answer_id_does_not_release_waiter()
     await test_matching_answer_id_releases_waiter()
     await test_power_command_does_not_wait_for_a_reply()
+    await test_clock_command_waits_for_its_reply()
     await test_matching_statistics_command_returns_true()
     await test_matching_sparse_statistics_command_returns_true()
     await test_non_statistics_command_returns_true()

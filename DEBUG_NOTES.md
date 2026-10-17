@@ -101,8 +101,9 @@ Numbers cross-checked against longshot's `EcamRequestId`.
 **A reply carries the id of its request.** Unsolicited status frames
 (`0x75`) arrive every few seconds while the machine is awake, so a
 pending request must only be considered answered by a frame with a
-matching id. `0x84` (power) and `0xe2` (clock) are never answered at
-all - waiting for them only blocks the device lock.
+matching id. `0x84` (power) is never answered at all - waiting for it
+only blocks the device lock. `0xe2` (clock) is answered with its own id
+(`d0 06 e2 f0 00 3c 25`, captured 2026-09-04).
 
 Switches managed by command [0x0d, 0x0b, 0x90, 0x0f, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 The nine digit (counted from 0) is the command bitmask
