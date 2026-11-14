@@ -244,6 +244,11 @@ RECIPE_ID_TO_BEVERAGE = {
     17: AvailableBeverage.STEAM,       # Steam
 }
 
+# How long to wait for one specific reply after send_command() returned on
+# the first frame. Replies come within ~300 ms (0xA9 ~270 ms, measured
+# 2026-10-17); the wait runs outside the device lock.
+REPLY_WAIT_SECONDS = 2
+
 
 def parse_raw_command(text: str) -> list[int]:
     """Turn hand-written hex into a byte list for send_command().
@@ -365,6 +370,9 @@ class DelongiPrimadonna:
         self._rx_buffer = bytearray()
         self._response_event = None
         self._expected_statistics_start: int | None = None
+        # Reply id -> event set when a frame with that id has been
+        # handled; see _send_and_wait_for().
+        self._reply_waiters: dict[int, asyncio.Event] = {}
         self._last_response: bytes | None = None
         self.statistics: dict[int, int | float] = {}
         self._last_stats_request = 0.0
@@ -820,6 +828,10 @@ class DelongiPrimadonna:
         elif answer_id == 0x95:
             self._handle_parameter_data(value)
 
+        reply_waiter = self._reply_waiters.get(answer_id)
+        if reply_waiter is not None:
+            reply_waiter.set()
+
         if (
             self._response_event is not None
             and not self._response_event.is_set()
@@ -1079,12 +1091,45 @@ class DelongiPrimadonna:
             command = BYTES_LOAD_PROFILES.copy()
             command[4] = start
             command[5] = min(start + 2, self._n_profiles)
-            # The response carries no start index; send_command waits
-            # for the response, so remembering it here is safe.
+            # The response carries no start index, so it is numbered from
+            # the range remembered here. send_command returns on the first
+            # frame of any kind, so wait for this range's own reply before
+            # asking for the next one; without it, a 0x75 frame ahead of
+            # the reply let the next range renumber it.
             self._profile_request_start = start
             self._profile_request_count = command[5] - start + 1
-            await self.send_command(command, log_timeout=False)
+            answered = await self._send_and_wait_for(
+                command, 0xA4, log_timeout=False
+            )
+            if not answered:
+                # Leave the marker on this range, so a reply that still
+                # comes is numbered correctly; update_settings() retries.
+                return
             await asyncio.sleep(0.3)
+
+    async def _send_and_wait_for(
+        self, message, answer_id: int, **kwargs
+    ) -> bool:
+        """Send a command and wait for a frame with ``answer_id``.
+
+        send_command() keeps the "first frame after the write wins" rule,
+        so it can return on an unrelated status frame before the reply.
+        This waits, outside the device lock and for at most
+        REPLY_WAIT_SECONDS more, until a frame with ``answer_id`` has been
+        handled. Returns whether one was.
+        """
+        waiter = asyncio.Event()
+        self._reply_waiters[answer_id] = waiter
+        try:
+            await self.send_command(message, **kwargs)
+            try:
+                await asyncio.wait_for(waiter.wait(), REPLY_WAIT_SECONDS)
+            except asyncio.TimeoutError:
+                return False
+            return True
+        finally:
+            if self._reply_waiters.get(answer_id) is waiter:
+                del self._reply_waiters[answer_id]
 
     async def set_time(self, dt: datetime) -> None:
         """Set device clock from provided datetime."""
@@ -1110,7 +1155,9 @@ class DelongiPrimadonna:
         """select a profile."""
         _LOGGER.debug("Send select profile command id=%s", profile_id)
         message = [0x0D, 0x06, 0xA9, 0xF0, profile_id, 0xD7, 0xC0]
-        await self.send_command(message)
+        # The 0xA9 reply sets active_profile_id; wait for it so the
+        # caller (the profile select) sees the confirmed profile.
+        await self._send_and_wait_for(message, 0xA9)
 
     async def set_auto_power_off(self, power_off_interval) -> None:
         """Set auto power off time."""

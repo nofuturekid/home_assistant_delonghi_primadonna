@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import time
+from binascii import crc_hqx, unhexlify
 
 from bleak.exc import BleakError
 
@@ -784,6 +785,83 @@ def make_profile_response(names):
     return bytes(body)
 
 
+def with_crc(frame):
+    """Set the length byte and append the CRC, as the machine sends it."""
+    body = bytearray(frame)
+    body[1] = len(body) + 2 - 1
+    crc = crc_hqx(bytes(body), 0x1D0F)
+    return bytes(body) + crc.to_bytes(2, byteorder="big")
+
+
+# Captured 2026-10-17 on an ECAM 656.55.MS, 165 ms after a power-on.
+STATUS_FRAME = unhexlify("d011700f0000000000024eaee700780a29ba")
+
+
+async def _no_connect():
+    return None
+
+
+async def _no_event(_value):
+    return None
+
+
+class LateProfileReplyClient:
+    """Answers each 0xA4 range request like a busy link can.
+
+    A status frame comes first and ends send_command()'s wait; the range's
+    own reply follows 0.5 s later, after the 0.3 s pause between ranges,
+    in 20-byte notifications.
+    """
+
+    is_connected = True
+
+    def __init__(self, device, replies):
+        self._device = device
+        self._replies = dict(replies)
+        self.tasks = []
+
+    async def write_gatt_char(self, _characteristic, message):
+        await self._device._process_raw_data(None, STATUS_FRAME)
+        reply = self._replies[message[4]]
+        self.tasks.append(asyncio.create_task(self._deliver(reply)))
+
+    async def _deliver(self, reply):
+        await asyncio.sleep(0.5)
+        for pos in range(0, len(reply), 20):
+            await self._device._process_raw_data(None, reply[pos:pos + 20])
+
+
+async def test_late_profile_reply_keeps_its_range():
+    """A range's names must not be numbered by the next range.
+
+    The 0xA4 reply carries no start index, so it is numbered from the
+    range last requested. send_command() returns on the first frame of any
+    kind; when a status frame came first, the next range was requested
+    before the reply arrived and the names of profiles 1-3 landed on 4-6.
+    """
+    device = make_device(FakeHass())
+    device._n_profiles = 6
+    device._connect = _no_connect
+    device._event_trigger = _no_event
+    first = {1: "Thomas", 2: "Nicole", 3: "Gast"}
+    second = {4: "Vier", 5: "Fuenf", 6: "Sechs"}
+    client = LateProfileReplyClient(
+        device,
+        {
+            1: with_crc(make_profile_response(first)),
+            4: with_crc(make_profile_response(second)),
+        },
+    )
+    device._client = client
+
+    await device._request_profile_names()
+    await asyncio.gather(*client.tasks)
+
+    assert device._profiles_received is True
+    for pid, name in {**first, **second}.items():
+        assert device.profile_name(pid) == name, device._profiles
+
+
 async def test_profiles_isolated_between_devices():
     defaults = dict(AVAILABLE_PROFILES)
     dev_a = make_device(FakeHass())
@@ -1036,6 +1114,7 @@ async def run_tests():
     await test_failed_user_command_explains_itself_when_not_visible()
     await test_failed_user_command_reports_the_refusal()
     await test_profiles_isolated_between_devices()
+    await test_late_profile_reply_keeps_its_range()
 
     await test_connect_success()
     await test_connect_clears_receive_buffer_before_notifications()
